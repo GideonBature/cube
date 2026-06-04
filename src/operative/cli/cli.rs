@@ -6,7 +6,7 @@ use crate::inscriptive::flame_manager::flame_config::flame_config::FMAccountFlam
 use crate::inscriptive::graveyard::graveyard::GRAVEYARD;
 use crate::inscriptive::params_manager::params_manager::PARAMS_MANAGER;
 use crate::inscriptive::privileges_manager::privileges_manager::PRIVILEGES_MANAGER;
-use crate::inscriptive::registery::registery::REGISTERY;
+use crate::inscriptive::registry::registry::REGISTRY;
 use crate::inscriptive::state_manager::state_manager::STATE_MANAGER;
 use crate::inscriptive::sync_manager::sync_manager::SYNC_MANAGER;
 use crate::inscriptive::utxo_set::utxo_set::UTXO_SET;
@@ -24,7 +24,7 @@ pub async fn run_engine_cli(
     _session_pool: &SESSION_POOL,
     chain: Chain,
     sync_manager: &SYNC_MANAGER,
-    registery: &REGISTERY,
+    registry: &REGISTRY,
     graveyard: &GRAVEYARD,
     coin_manager: &COIN_MANAGER,
     flame_manager: &FLAME_MANAGER,
@@ -64,17 +64,17 @@ pub async fn run_engine_cli(
                     chain,
                     port,
                     archival_manager.as_ref(),
-                    registery,
+                    registry,
                     None,
                     coin_manager,
                     flame_manager,
                 )
                 .await;
             }
-            "rootaccount" => common_commands::rootaccount::rootaccount_command(key_holder, registery).await,
+            "rootaccount" => common_commands::rootaccount::rootaccount_command(key_holder, registry).await,
             "engine" => common_commands::engine::engine_command(chain),
             "print" => match parts.get(1).map(String::as_str) {
-                Some("registery") => common_commands::registery::registery_command(registery).await,
+                Some("registry") => common_commands::registry::registry_command(registry).await,
                 Some("coinmanager") => {
                     common_commands::coinmanager::coinmanager_command(coin_manager).await
                 }
@@ -84,10 +84,10 @@ pub async fn run_engine_cli(
                 }
                 _ => eprintln!(
                     "{}",
-                    "Usage: print <registery|coinmanager|graveyard|flamemanager>.".yellow()
+                    "Usage: print <registry|coinmanager|graveyard|flamemanager>.".yellow()
                 ),
             },
-            "registery" => {
+            "registry" => {
                 match (
                     parts.get(1).map(String::as_str),
                     parts.get(2).map(String::as_str),
@@ -102,15 +102,15 @@ pub async fn run_engine_cli(
                         };
 
                         let is_registered = {
-                            let _registery = registery.lock().await;
-                            _registery.is_account_registered(account_key)
+                            let _registry = registry.lock().await;
+                            _registry.is_account_registered(account_key)
                         };
                         println!("{}", is_registered);
                     }
                     _ => {
                         eprintln!(
                             "{}",
-                            "Usage: registery isaccountregistered <account_key_hex>.".yellow()
+                            "Usage: registry isaccountregistered <account_key_hex>.".yellow()
                         );
                     }
                 }
@@ -187,7 +187,7 @@ pub async fn run_node_cli(
     key_holder: &KeyHolder,
     utxo_set: &UTXO_SET,
     sync_manager: &SYNC_MANAGER,
-    registery: &REGISTERY,
+    registry: &REGISTRY,
     graveyard: &GRAVEYARD,
     coin_manager: &COIN_MANAGER,
     flame_manager: &FLAME_MANAGER,
@@ -229,7 +229,7 @@ pub async fn run_node_cli(
                     chain,
                     port,
                     archival_manager.as_ref(),
-                    registery,
+                    registry,
                     Some(privileges_manager),
                     coin_manager,
                     flame_manager,
@@ -237,11 +237,11 @@ pub async fn run_node_cli(
                 .await;
             }
             "rootaccount" => {
-                common_commands::rootaccount::rootaccount_command(key_holder, registery).await
+                common_commands::rootaccount::rootaccount_command(key_holder, registry).await
             }
             "engine" => common_commands::engine::engine_command(chain),
             "print" => match parts.get(1).map(String::as_str) {
-                Some("registery") => common_commands::registery::registery_command(registery).await,
+                Some("registry") => common_commands::registry::registry_command(registry).await,
                 Some("coinmanager") => {
                     common_commands::coinmanager::coinmanager_command(coin_manager).await
                 }
@@ -251,10 +251,10 @@ pub async fn run_node_cli(
                 }
                 _ => eprintln!(
                     "{}",
-                    "Usage: print <registery|coinmanager|graveyard|flamemanager>.".yellow()
+                    "Usage: print <registry|coinmanager|graveyard|flamemanager>.".yellow()
                 ),
             },
-            "registery" => {
+            "registry" => {
                 match (
                     parts.get(1).map(String::as_str),
                     parts.get(2).map(String::as_str),
@@ -269,15 +269,15 @@ pub async fn run_node_cli(
                         };
 
                         let is_registered = {
-                            let _registery = registery.lock().await;
-                            _registery.is_account_registered(account_key)
+                            let _registry = registry.lock().await;
+                            _registry.is_account_registered(account_key)
                         };
                         println!("{}", is_registered);
                     }
                     _ => {
                         eprintln!(
                             "{}",
-                            "Usage: registery isaccountregistered <account_key_hex>.".yellow()
+                            "Usage: registry isaccountregistered <account_key_hex>.".yellow()
                         );
                     }
                 }
@@ -359,7 +359,7 @@ pub async fn run_node_cli(
                     key_holder,
                     sync_manager,
                     utxo_set,
-                    registery,
+                    registry,
                     engine_conn,
                 )
                 .await
@@ -386,7 +386,7 @@ pub async fn run_node_cli(
                     key_holder,
                     sync_manager,
                     utxo_set,
-                    registery,
+                    registry,
                     graveyard,
                     coin_manager,
                     flame_manager,
@@ -437,7 +437,7 @@ pub async fn run_node_cli(
                                 continue;
                             }
                         };
-                        node_commands::rank::account_rank_command(registery, account_key).await;
+                        node_commands::rank::account_rank_command(registry, account_key).await;
                     }
                     _ => {
                         eprintln!(
@@ -463,7 +463,7 @@ pub async fn run_node_cli(
                                 continue;
                             }
                         };
-                        node_commands::rank::contract_rank_command(registery, contract_id).await;
+                        node_commands::rank::contract_rank_command(registry, contract_id).await;
                     }
                     _ => {
                         eprintln!(
@@ -510,7 +510,7 @@ pub async fn run_node_cli(
                     to_account_key,
                     key_holder,
                     sync_manager,
-                    registery,
+                    registry,
                     engine_conn,
                 )
                 .await;
@@ -528,7 +528,7 @@ pub async fn run_node_cli(
                     amount,
                     key_holder,
                     sync_manager,
-                    registery,
+                    registry,
                     coin_manager,
                     params_manager,
                     engine_conn,
@@ -554,7 +554,7 @@ pub async fn run_node_cli(
                     fc,
                     key_holder,
                     sync_manager,
-                    registery,
+                    registry,
                     coin_manager,
                     params_manager,
                     engine_conn,
@@ -599,7 +599,7 @@ pub async fn run_node_cli(
                     program_bytes,
                     key_holder,
                     sync_manager,
-                    registery,
+                    registry,
                     coin_manager,
                     params_manager,
                     engine_conn,
