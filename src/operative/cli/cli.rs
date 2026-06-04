@@ -171,7 +171,8 @@ pub async fn run_engine_cli(
                     }
                 }
             }
-            _ => eprintln!("{}", format!("Unknown commmand.").yellow()),
+            "help" => print_help(false),
+            _ => eprintln!("{}", "Unknown command.".yellow()),
         }
     }
 }
@@ -605,7 +606,8 @@ pub async fn run_node_cli(
                 )
                 .await;
             }
-            _ => eprintln!("{}", format!("Unknown commmand.").yellow()),
+            "help" => print_help(true),
+            _ => eprintln!("{}", "Unknown command.".yellow()),
         }
     }
 }
@@ -616,6 +618,43 @@ fn print_cli_prompt() {
         "{}",
         "Enter command (type help for options, type exit to quit):".cyan()
     );
+}
+
+/// Prints the list of available CLI commands.
+fn print_help(is_node: bool) {
+    println!("{}", "Available commands:".cyan());
+    println!("  help                                       Show this list.");
+    println!("  tip                                        Show the current chain/batch tip.");
+    println!("  rootaccount                                Show this node's root account.");
+    println!("  engine                                     Show the engine public key.");
+    println!("  print <registery|coinmanager|graveyard|flamemanager>");
+    println!("  registery isaccountregistered <account_key_hex>");
+    println!("  coinmanager isaccountregistered <account_key_hex>");
+    println!("  flamemanager isaccountregistered <account_key_hex>");
+    println!("  runexplorer <port>                         Start the block explorer.");
+    println!("  clear                                      Clear the screen.");
+    println!("  exit                                       Quit.");
+
+    if is_node {
+        println!("{}", "Node commands:".cyan());
+        println!("  liftaddr                                   Show this node's lift address.");
+        println!("  lifts                                      List available lifts.");
+        println!("  liftup                                     Lift funds up into Cube.");
+        println!("  liftuplocal                                Lift up (local-only).");
+        println!("  batchrecord <batch_height>                 Fetch a batch record.");
+        println!("  coins [account_key_hex]                    Show coins (default: self).");
+        println!("  account rank <account_key_hex>             Show an account's rank.");
+        println!("  contract rank <contract_id_hex>            Show a contract's rank.");
+        println!("  move <satoshi_amount> <to_account_key_hex> Move funds to another account.");
+        println!("  swapout <amount>                           Swap funds out to Bitcoin.");
+        println!("  deploy <initial_balance> <0x_program>      Deploy a contract.");
+        println!("  config [sak <hex>] [pc <32b_hex>] [fc <hex>]");
+        println!("  decompile <...>                            Decompile program bytes.");
+        println!("  comp <...>                                 Compile a program.");
+        println!("  conn                                       Show engine connection.");
+        println!("  ping                                       Ping the engine.");
+        println!("  npub                                       Show this node's npub.");
+    }
 }
 
 /// Parses the CLI input into parts.
