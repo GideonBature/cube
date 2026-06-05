@@ -8,8 +8,6 @@ type ScriptPubKey = Vec<u8>;
 /// This function takes a network type and returns the corresponding HRP.
 ///
 /// # Arguments
-///
-
 fn hrp_from_chain(chain: Chain) -> Option<Hrp> {
     match chain {
         Chain::Signet | Chain::Testbed => Hrp::parse("tb").ok(),
@@ -70,12 +68,10 @@ pub fn encode_p2wpkh(chain: Chain, witness_program: [u8; 20]) -> Option<String> 
 /// * `address` - The Bech32-encoded Bitcoin address to decode.
 ///
 /// # Returns
-///
-
 pub fn address_to_spk(chain: Chain, address: &str) -> Option<ScriptPubKey> {
     let mut spk = Vec::<u8>::new();
 
-    let (hrp, version, program) = match segwit::decode(&address) {
+    let (hrp, version, program) = match segwit::decode(address) {
         Ok(result) => result,
         Err(_) => return None,
     };

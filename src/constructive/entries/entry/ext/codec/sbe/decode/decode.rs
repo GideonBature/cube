@@ -37,8 +37,8 @@ impl Entry {
 
             // 3.c `Liftup` (`0x04`): decode from the full buffer (`Liftup::decode_sbe` consumes the tag).
             0x04 => {
-                let liftup = Liftup::decode_sbe(bytes)
-                    .map_err(|err| EntrySBEDecodeError::LiftupSBEDecodeError(err))?;
+                let liftup =
+                    Liftup::decode_sbe(bytes).map_err(EntrySBEDecodeError::LiftupSBEDecodeError)?;
 
                 Ok(Entry::Liftup(liftup))
             }

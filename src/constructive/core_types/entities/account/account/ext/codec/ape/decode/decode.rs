@@ -17,12 +17,12 @@ impl Account {
         let rank: u64 = match decode_rank_as_longval {
             // 1.a The rank is decoded as a `LongVal`.
             true => LongVal::decode_ape(bit_stream)
-                .map_err(|e| AccountAPEDecodeError::FailedToDecodeRankValueAsLongVal(e))?
+                .map_err(AccountAPEDecodeError::FailedToDecodeRankValueAsLongVal)?
                 .value(),
 
             // 1.b The rank is decoded as a `ShortVal`.
             false => ShortVal::decode_ape(bit_stream)
-                .map_err(|e| AccountAPEDecodeError::FailedToDecodeRankValueAsShortVal(e))?
+                .map_err(AccountAPEDecodeError::FailedToDecodeRankValueAsShortVal)?
                 .value() as u64,
         };
 
@@ -52,7 +52,7 @@ impl Account {
                 let account = Account::UnregisteredAccount(unregistered_account);
 
                 // 2.a.6 Return the unregistered `Account`.
-                return Ok(account);
+                Ok(account)
             }
 
             // 2.b The `Account` is registered.
@@ -69,7 +69,7 @@ impl Account {
                 };
 
                 // 2.b.2 Return the `Account`.
-                return Ok(account);
+                Ok(account)
             }
         }
     }

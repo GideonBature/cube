@@ -156,7 +156,7 @@ impl BatchRecord {
             Value::Array(
                 self.expired_projector_outpoints
                     .iter()
-                    .map(|op| json_outpoint(op))
+                    .map(json_outpoint)
                     .collect(),
             ),
         );

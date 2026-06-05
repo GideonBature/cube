@@ -127,7 +127,7 @@ impl LivenessFlag {
     /// Deserializes the liveness flag from bytes.
     pub fn from_bytes(bytes: &[u8]) -> Option<LivenessFlag> {
         // 1 Check if there are enough bytes for the liveness flag.
-        if bytes.len() < 1 {
+        if bytes.is_empty() {
             return None;
         }
 

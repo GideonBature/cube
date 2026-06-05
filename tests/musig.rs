@@ -71,7 +71,7 @@ mod musig_standalone {
             signer_1_binding_public_nonce,
         ));
 
-        assert_eq!(session_ctx.ready(), false);
+        assert!(!session_ctx.ready());
 
         // Siner 2 inserting their nonce.
 
@@ -95,7 +95,7 @@ mod musig_standalone {
             signer_2_binding_public_nonce,
         ));
 
-        assert_eq!(session_ctx.ready(), false);
+        assert!(!session_ctx.ready());
 
         // Siner 3 inserting their nonce.
 
@@ -119,7 +119,7 @@ mod musig_standalone {
             signer_3_binding_public_nonce,
         ));
 
-        assert_eq!(session_ctx.ready(), true);
+        assert!(session_ctx.ready());
 
         // Agg nonce
 

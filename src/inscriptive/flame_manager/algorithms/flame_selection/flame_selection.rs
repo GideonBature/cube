@@ -24,13 +24,7 @@ pub fn return_flames_to_fund(
     }
 
     // 2 Calculate the gap amount.
-    let gap_amount: SatoshiAmount = match target_value.checked_sub(current_flame_set_sum_value) {
-        // 2.1 Gap amount is none. Return none.
-        None => return None,
-
-        // 2.2 Gap amount is some. Return the gap amount.
-        Some(gap_amount) => gap_amount,
-    };
+    let gap_amount: SatoshiAmount = target_value.checked_sub(current_flame_set_sum_value)?;
 
     // 3 Initialize the list of flames to return.
     let mut flames = Vec::<Flame>::new();

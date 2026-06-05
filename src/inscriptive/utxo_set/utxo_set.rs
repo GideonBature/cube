@@ -41,24 +41,22 @@ impl UTXOSet {
     /// Creates the UTXOSet instance.
     pub fn new(chain: Chain) -> Option<UTXO_SET> {
         // Collect UTXOs from db.
-        let utxos_path = format!("{}/{}/{}", "storage", chain.to_string(), "utxo_set");
+        let utxos_path = format!("{}/{}/{}", "storage", chain, "utxo_set");
         let utxos_db = sled::open(utxos_path).ok()?;
 
         let mut utxos = HashMap::<OutPoint, TxOut>::new();
 
         // Load UTXOs from db.
-        for lookup in utxos_db.iter() {
-            if let Ok((key, val)) = lookup {
-                // Deserialize outpoint.
-                let outpoint_bytes: [u8; 36] = key.as_ref().try_into().ok()?;
-                let outpoint = OutPoint::from_bytes36(&outpoint_bytes)?;
+        for (key, val) in utxos_db.iter().flatten() {
+            // Deserialize outpoint.
+            let outpoint_bytes: [u8; 36] = key.as_ref().try_into().ok()?;
+            let outpoint = OutPoint::from_bytes36(&outpoint_bytes)?;
 
-                // Deserialize txout.
-                let txout = TxOut::from_bytes(val.as_ref())?;
+            // Deserialize txout.
+            let txout = TxOut::from_bytes(val.as_ref())?;
 
-                // Insert utxo.
-                utxos.insert(outpoint, txout);
-            }
+            // Insert utxo.
+            utxos.insert(outpoint, txout);
         }
 
         // Construct the UTXOSet instance.
@@ -81,18 +79,18 @@ impl UTXOSet {
     /// Inserts a utxo into the set.
     pub fn insert_utxo(&mut self, outpoint: &OutPoint, txout: &TxOut) {
         // Insert utxo into the in-memory set.
-        if let None = self.utxos.insert(outpoint.clone(), txout.clone()) {
+        if self.utxos.insert(*outpoint, txout.clone()).is_none() {
             // Insert utxo into the in-storage set.
-            let _ = self.utxos_db.insert(&outpoint.bytes_36(), txout.bytes());
+            let _ = self.utxos_db.insert(outpoint.bytes_36(), txout.bytes());
         }
     }
 
     /// Removes a utxo from the set.
     pub fn remove_utxo(&mut self, outpoint: &OutPoint) {
         // Remove utxo from the in-memory set.
-        if let Some(_) = self.utxos.remove(outpoint) {
+        if self.utxos.remove(outpoint).is_some() {
             // Remove utxo from the in-storage set.
-            let _ = self.utxos_db.remove(&outpoint.bytes_36());
+            let _ = self.utxos_db.remove(outpoint.bytes_36());
         }
     }
 
@@ -136,7 +134,7 @@ impl UTXOSet {
                     lifts.push(Lift::new_liftv1(
                         account_key,
                         engine_key,
-                        outpoint.clone(),
+                        *outpoint,
                         txout.clone(),
                     ));
 
@@ -149,7 +147,7 @@ impl UTXOSet {
                     lifts.push(Lift::new_liftv2(
                         account_key,
                         engine_key,
-                        outpoint.clone(),
+                        *outpoint,
                         txout.clone(),
                     ));
                 }
@@ -182,7 +180,7 @@ impl UTXOSet {
 /// Erases the UTXO set by db path.
 pub fn erase_utxo_set(chain: Chain) {
     // UTXO set db path.
-    let utxo_set_db_path = format!("storage/{}/utxo_set", chain.to_string());
+    let utxo_set_db_path = format!("storage/{}/utxo_set", chain);
 
     // Erase the UTXO set db path.
     let _ = std::fs::remove_dir_all(utxo_set_db_path);

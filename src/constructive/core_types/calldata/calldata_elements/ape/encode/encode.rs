@@ -84,7 +84,7 @@ impl CalldataElement {
                 let bits = account
                     .encode_ape(registry, encode_account_rank_as_longval)
                     .await
-                    .map_err(|e| CalldataElementAPEEncodeError::AccountAPEEncodeError(e))?;
+                    .map_err(CalldataElementAPEEncodeError::AccountAPEEncodeError)?;
 
                 // Return the bits.
                 Ok(bits)
@@ -94,7 +94,7 @@ impl CalldataElement {
                 let bits = contract
                     .encode_ape(registry, encode_contract_rank_as_longval)
                     .await
-                    .map_err(|e| CalldataElementAPEEncodeError::ContractAPEEncodeError(e))?;
+                    .map_err(CalldataElementAPEEncodeError::ContractAPEEncodeError)?;
 
                 // Return the bits.
                 Ok(bits)

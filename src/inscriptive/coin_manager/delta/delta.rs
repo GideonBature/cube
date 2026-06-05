@@ -78,7 +78,6 @@ impl CMDelta {
 
     /// ACCOUNT RELATED METHODS ///
     /// ------------------------------------------------------------
-
     /// Epheremally updates an account's balance.
     pub fn ephemerally_update_account_balance(
         &mut self,
@@ -100,7 +99,6 @@ impl CMDelta {
 
     /// CONTRACT RELATED METHODS ///
     /// ------------------------------------------------------------
-
     /// Epheremally updates a contract's balance.
     pub fn ephemerally_update_contract_balance(
         &mut self,
@@ -114,7 +112,7 @@ impl CMDelta {
     pub fn ephemerally_insert_alloc(&mut self, contract_id: ContractId, account_key: AccountKey) {
         self.allocs_list
             .entry(contract_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(account_key);
     }
 
@@ -122,7 +120,7 @@ impl CMDelta {
     pub fn ephemerally_insert_dealloc(&mut self, contract_id: ContractId, account_key: AccountKey) {
         self.deallocs_list
             .entry(contract_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(account_key);
     }
 

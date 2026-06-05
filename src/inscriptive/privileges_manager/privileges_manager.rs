@@ -65,12 +65,12 @@ impl PrivilegesManager {
     /// Creates a new privileges manager.
     pub fn new(chain: Chain) -> Result<PRIVILEGES_MANAGER, PrivilegesManagerConstructionError> {
         // 1 Open the accounts db.
-        let accounts_db_path = format!("storage/{}/privileges/accounts", chain.to_string());
+        let accounts_db_path = format!("storage/{}/privileges/accounts", chain);
         let accounts_db = sled::open(accounts_db_path)
             .map_err(PrivilegesManagerConstructionError::AccountsDBOpenError)?;
 
         // 2 Open the contracts db.
-        let contracts_db_path = format!("storage/{}/privileges/contracts", chain.to_string());
+        let contracts_db_path = format!("storage/{}/privileges/contracts", chain);
         let contracts_db = sled::open(contracts_db_path)
             .map_err(PrivilegesManagerConstructionError::ContractsDBOpenError)?;
 
@@ -1062,9 +1062,9 @@ impl PrivilegesManager {
 
 /// Erases the privileges manager by db paths.
 pub fn erase_privileges_manager(chain: Chain) {
-    let accounts_db_path = format!("storage/{}/privileges/accounts", chain.to_string());
+    let accounts_db_path = format!("storage/{}/privileges/accounts", chain);
     let _ = std::fs::remove_dir_all(accounts_db_path);
 
-    let contracts_db_path = format!("storage/{}/privileges/contracts", chain.to_string());
+    let contracts_db_path = format!("storage/{}/privileges/contracts", chain);
     let _ = std::fs::remove_dir_all(contracts_db_path);
 }

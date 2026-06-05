@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// Operating mode type.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum ResourceMode {
@@ -5,11 +7,11 @@ pub enum ResourceMode {
     Archival,
 }
 
-impl ToString for ResourceMode {
-    fn to_string(&self) -> String {
-        match self {
-            ResourceMode::Pruned => "pruned".to_string(),
-            ResourceMode::Archival => "archival".to_string(),
-        }
+impl fmt::Display for ResourceMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            ResourceMode::Pruned => "pruned",
+            ResourceMode::Archival => "archival",
+        })
     }
 }

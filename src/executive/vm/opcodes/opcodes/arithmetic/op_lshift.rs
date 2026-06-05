@@ -50,14 +50,12 @@ impl OP_LSHIFT {
             let bit_shift = shift_amount % 8;
 
             // Add leading zeros for byte shift
-            for _ in 0..byte_shift {
-                result.push(0);
-            }
+            result.extend(std::iter::repeat_n(0u8, byte_shift));
 
             // Handle bit shifting
             if bit_shift == 0 {
                 // Just copy the bytes
-                result.extend_from_slice(&a_bytes);
+                result.extend_from_slice(a_bytes);
             } else {
                 // Need to handle bit shifting across byte boundaries
                 let mut carry = 0u8;

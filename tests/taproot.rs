@@ -133,7 +133,7 @@ mod taproot_tests {
         let expected_spk =
             hex::decode("512085dbf94f892274c41acb75d48daf338c739d1157c70963912db526c4cad30d1a")?;
         assert_eq!(tap_root_with_odd.spk().unwrap(), expected_spk);
-        assert_eq!(tap_root_with_odd.tweaked_key_parity().unwrap(), true);
+        assert!(tap_root_with_odd.tweaked_key_parity().unwrap());
 
         // Test with even tweaked key
 
@@ -143,7 +143,7 @@ mod taproot_tests {
         let expected_spk =
             hex::decode("51201fbb64a309f43ee6a442cd293a9df3ce3bbb0864a2215a1091c06521021f9de4")?;
         assert_eq!(tap_root_with_even.spk().unwrap(), expected_spk);
-        assert_eq!(tap_root_with_even.tweaked_key_parity().unwrap(), false);
+        assert!(!tap_root_with_even.tweaked_key_parity().unwrap());
 
         Ok(())
     }
@@ -317,14 +317,7 @@ mod taproot_tests {
         let tap_leaf_4: TapLeaf = TapLeaf::new(vec![0xdd]);
         let tap_leaf_5: TapLeaf = TapLeaf::new(vec![0xee]);
 
-        let mut leaves: Vec<TapLeaf> = vec![];
-
-        // Test single-leaf - aa
-        leaves.push(tap_leaf_1);
-        leaves.push(tap_leaf_2);
-        leaves.push(tap_leaf_3);
-        leaves.push(tap_leaf_4);
-        leaves.push(tap_leaf_5);
+        let leaves: Vec<TapLeaf> = vec![tap_leaf_1, tap_leaf_2, tap_leaf_3, tap_leaf_4, tap_leaf_5];
 
         let tap_tree: TapTree = TapTree::new(leaves.clone());
 

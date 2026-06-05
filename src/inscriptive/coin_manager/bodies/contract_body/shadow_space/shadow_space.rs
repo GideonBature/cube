@@ -42,14 +42,13 @@ impl ShadowSpace {
         allocs: HashMap<ACCOUNT_KEY, SATI_SATOSHI_AMOUNT>,
     ) -> Self {
         // 1 Construct the shadow space.
-        let shadow_space = Self {
-            allocs_sum: allocs_sum,
-            allocs: allocs,
-            shadow_up_all_down_alls: 0,
-        };
 
         // 2 Return the shadow space.
-        shadow_space
+        Self {
+            allocs_sum,
+            allocs,
+            shadow_up_all_down_alls: 0,
+        }
     }
 
     /// Updates the allocations sum.
@@ -71,10 +70,7 @@ impl ShadowSpace {
     /// Removes an allocation from the shadow space.
     pub fn remove_alloc(&mut self, account_key: ACCOUNT_KEY) -> bool {
         // 1 Remove the allocation from the allocations map.
-        match self.allocs.remove(&account_key) {
-            Some(_) => true,
-            None => false,
-        }
+        self.allocs.remove(&account_key).is_some()
     }
 
     /// Adds a deferred proportional change to the shadow space.

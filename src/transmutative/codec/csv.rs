@@ -70,14 +70,14 @@ fn days_to_bytes(days: u8, cscript_num: bool) -> Bytes {
     if blocks <= 255 {
         // Single-byte
         vec.push(blocks as u8);
-        if cscript_num == true && blocks > 127 {
+        if cscript_num && blocks > 127 {
             // CScriptNum
             vec.push(0x00);
         }
     } else {
         // Two-bytes
         vec.extend(vec![(blocks & 0xFF) as u8, (blocks >> 8 & 0xFF) as u8]);
-        if cscript_num == true && blocks > 32767 {
+        if cscript_num && blocks > 32767 {
             // CScriptNum
             vec.push(0x00);
         }

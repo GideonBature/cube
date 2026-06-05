@@ -55,10 +55,8 @@ impl NNSClient {
             .send_event_builder(note_publish_event)
             .await
         {
-            Ok(ok) => {
-                return Some(ok.as_bytes().to_owned());
-            }
-            Err(_) => return None,
-        };
+            Ok(ok) => Some(ok.as_bytes().to_owned()),
+            Err(_) => None,
+        }
     }
 }

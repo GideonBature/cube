@@ -375,7 +375,7 @@ impl SessionPool {
             bitcoin_transaction_feerate,
             engine_keyholder,
         )
-        .map_err(|err| IntoBatchContainerError::SignedBatchTxnConstructError(err))?;
+        .map_err(IntoBatchContainerError::SignedBatchTxnConstructError)?;
 
         // 17 Construct the batch container.
         let batch_container =

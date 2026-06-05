@@ -135,7 +135,7 @@ fn print_nsec_frame(nsec: &str) {
 }
 
 /// Generates a random secret key and prints it as an nsec.
-fn gensec(args: &Vec<String>) {
+fn gensec(args: &[String]) {
     // 1 Match the argument name.
     match args[1].to_lowercase().as_str() {
         // 1.a Command is 'gensec'.
@@ -165,7 +165,6 @@ fn gensec(args: &Vec<String>) {
             drop(nsec);
 
             // 1.a.4 Return.
-            return;
         }
 
         // 1.b Command is invalid.
@@ -174,7 +173,7 @@ fn gensec(args: &Vec<String>) {
 }
 
 /// Prints genesis params as pretty JSON (random engine key + genesis payload P2TR address).
-fn genesis(args: &Vec<String>) {
+fn genesis(args: &[String]) {
     // 1 Match the argument name.
     match args[1].to_lowercase().as_str() {
         // 1.a Command is 'genesis'.
@@ -269,7 +268,7 @@ fn genesis(args: &Vec<String>) {
 }
 
 /// Runs the appropriate mode based on the arguments.
-fn run(args: &Vec<String>) {
+fn run(args: &[String]) {
     // 1 Parse resource mode.
     let resource_mode = match args[1].to_lowercase().as_str() {
         "pruned" => ResourceMode::Pruned,
@@ -338,16 +337,13 @@ fn run(args: &Vec<String>) {
                 // 6.2.3 Get the handle.
                 let handle = stdin.lock();
 
-                // 6.2.4 Drop stdin.
-                drop(stdin);
-
                 // 6.2.5 Parse the input.
-                for line in handle.lines() {
+                if let Some(line) = handle.lines().next() {
                     // 6.2.5.1 Unwrap the line.
                     let line = line.unwrap();
 
                     // 6.2.5.2 Parse the parts.
-                    let parts: Vec<&str> = line.trim().split_whitespace().collect();
+                    let parts: Vec<&str> = line.split_whitespace().collect();
 
                     // 6.2.5.3 Check if the parts length is valid.
                     if parts.len() != 1 {
@@ -371,9 +367,6 @@ fn run(args: &Vec<String>) {
 
                     // 6.2.5.7 Drop the nsec.
                     drop(nsec);
-
-                    // 6.2.5.8 Break the loop.
-                    break;
                 }
             }
             //
@@ -412,9 +405,7 @@ fn run(args: &Vec<String>) {
 fn print_correct_usage() {
     eprintln!(
         "{}",
-        format!(
-            "Usage:\n  gensec\n  genesis <mainnet|signet|testbed>\n  <mode> <chain> <kind> <bitcoin-rpc-url> <bitcoin-rpc-user> <bitcoin-rpc-password> <syncinflight?>\n\nIn engine/node CLI (archival mode): runexplorer <port>"
-        )
+        "Usage:\n  gensec\n  genesis <mainnet|signet|testbed>\n  <mode> <chain> <kind> <bitcoin-rpc-url> <bitcoin-rpc-user> <bitcoin-rpc-password> <syncinflight?>\n\nIn engine/node CLI (archival mode): runexplorer <port>".to_string()
         .red()
     );
 }

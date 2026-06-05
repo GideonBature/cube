@@ -59,7 +59,7 @@ impl PeriodicResource {
                 let new_amount = self.limit;
 
                 // 3.a.2 Return the new amount.
-                return Some(new_amount);
+                Some(new_amount)
             }
 
             // 3.b If the time passed is less than the period.
@@ -75,9 +75,9 @@ impl PeriodicResource {
                 let new_amount = new_amount.min(self.limit);
 
                 // 3.b.4 Return the new amount.
-                return Some(new_amount);
+                Some(new_amount)
             }
-        };
+        }
     }
 
     /// Refills the resource, then consumes the given amount, then updates and returns the new consume amount left.
@@ -98,14 +98,14 @@ impl PeriodicResource {
 
             // Consume amount is fulyl subsided, so the consume amount left is 0.
             let consume_amount_left = 0;
-            return Some(consume_amount_left);
+            Some(consume_amount_left)
         } else {
             // Resource is exhausted, thus the new current left is 0.
             self.latest_left = 0;
 
             // Consume amount is exceeded the resource, thus the consume amount left is the consume amount minus the current left.
             let consume_amount_left = consume_amount - current_left;
-            return Some(consume_amount_left);
+            Some(consume_amount_left)
         }
     }
 

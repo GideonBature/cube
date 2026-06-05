@@ -25,6 +25,17 @@ pub type BatchTimestamp = u64;
 /// Type alias for the entry id.
 pub type EntryId = [u8; 32];
 
+/// Entry lookup result returned by `entry_record_by_entry_id`.
+pub type EntryRecord = (
+    BatchHeight,
+    BatchTxid,
+    BatchTimestamp,
+    EntryId,
+    Entry,
+    Option<String>,
+    Option<EntryFees>,
+);
+
 /// Local storage manager for `BatchRecord` for nodes that run in archival mode.
 pub struct ArchivalManager {
     // In-memory batch records keyed by batch height.
@@ -64,7 +75,7 @@ impl ArchivalManager {
     /// Constructs an `ArchivalManager` by opening storage and loading existing `BatchRecord`s.
     pub fn new(chain: Chain) -> Result<ARCHIVAL_MANAGER, ArchivalConstructionError> {
         // 1 Open the archival manager db.
-        let db_path = format!("storage/{}/archival_manager", chain.to_string());
+        let db_path = format!("storage/{}/archival_manager", chain);
         let in_db_records = sled::open(&db_path).map_err(ArchivalConstructionError::DBOpenError)?;
 
         // 2 Initialize the in-memory map of loaded records.
@@ -210,18 +221,7 @@ impl ArchivalManager {
     }
 
     /// Returns an Entry record by entry id.
-    pub fn entry_record_by_entry_id(
-        &self,
-        entry_id: &[u8; 32],
-    ) -> Option<(
-        BatchHeight,
-        BatchTxid,
-        BatchTimestamp,
-        EntryId,
-        Entry,
-        Option<String>,
-        Option<EntryFees>,
-    )> {
+    pub fn entry_record_by_entry_id(&self, entry_id: &[u8; 32]) -> Option<EntryRecord> {
         // 1 Walk batches in ascending batch height order.
         for h in sorted_batch_heights(&self.in_memory_records) {
             let record = &self.in_memory_records[&h];
@@ -388,7 +388,7 @@ impl ArchivalManager {
 /// Erases the archival manager database directory for the chain.
 pub fn erase_archival_manager(chain: Chain) {
     // 1 Resolve the archival manager db path.
-    let path = format!("storage/{}/archival_manager", chain.to_string());
+    let path = format!("storage/{}/archival_manager", chain);
 
     // 2 Remove the directory tree.
     let _ = std::fs::remove_dir_all(path);

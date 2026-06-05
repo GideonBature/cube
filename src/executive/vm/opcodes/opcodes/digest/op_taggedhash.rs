@@ -54,10 +54,7 @@ const TAGGEDHASH_OPS_OUTPUT_LEN: u32 = 32;
 // Calculate the number of ops for a OP_TAGGEDHASH opcode.
 fn calculate_ops(preimage_len: u32) -> u32 {
     // Calculate the gap between the preimage length and the output length.
-    let gap = match TAGGEDHASH_OPS_OUTPUT_LEN.checked_sub(preimage_len) {
-        Some(gap) => gap,
-        None => 0,
-    };
+    let gap = TAGGEDHASH_OPS_OUTPUT_LEN.saturating_sub(preimage_len);
 
     // Return the number of ops.
     TAGGEDHASH_OPS_BASE + (TAGGEDHASH_OPS_MULTIPLIER * gap)

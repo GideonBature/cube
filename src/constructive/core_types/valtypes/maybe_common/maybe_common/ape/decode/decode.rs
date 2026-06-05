@@ -68,7 +68,7 @@ where
                     MaybeCommonValueType::Short => {
                         // 2.b.1.a.1 Decode uncommon short value.
                         let uncommon_short_val = ShortVal::decode_ape(bit_stream)
-                            .map_err(|e| MaybeCommonAPEDecodeError::ShortValAPEDecodeError(e))?;
+                            .map_err(MaybeCommonAPEDecodeError::ShortValAPEDecodeError)?;
 
                         // 2.b.1.a.2 Return the uncommon short value.
                         Ok(MaybeCommon::Uncommon(uncommon_short_val.into()))
@@ -78,7 +78,7 @@ where
                     MaybeCommonValueType::Long => {
                         // 2.b.1.b.1 Decode uncommon long value.
                         let uncommon_long_val = LongVal::decode_ape(bit_stream)
-                            .map_err(|e| MaybeCommonAPEDecodeError::LongValAPEDecodeError(e))?;
+                            .map_err(MaybeCommonAPEDecodeError::LongValAPEDecodeError)?;
 
                         // 2.b.1.b.2 Return the uncommon long value.
                         Ok(MaybeCommon::Uncommon(uncommon_long_val.into()))

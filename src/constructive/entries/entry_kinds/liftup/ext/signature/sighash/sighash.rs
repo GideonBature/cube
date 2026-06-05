@@ -8,7 +8,7 @@ impl Liftup {
         // 1 Encode the `Liftup` as SBE bytes for the sighash preimage.
         let sighash_preimage = self
             .encode_sbe()
-            .map_err(|err| LiftupSighashError::SBEEncodeError(err))?;
+            .map_err(LiftupSighashError::SBEEncodeError)?;
 
         // 2 Hash the sighash preimage with the 'LiftupEntrySighash' tag.
         let sighash = sighash_preimage.hash(Some(HashTag::LiftupEntrySighash));

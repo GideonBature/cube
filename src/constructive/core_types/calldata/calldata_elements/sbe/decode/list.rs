@@ -21,8 +21,8 @@ pub fn decode_calldata_elements_sbe(
     let mut elements = Vec::with_capacity(count);
 
     for _ in 0..count {
-        let (element, remaining) = CalldataElement::decode_sbe(rest)
-            .map_err(|e| CalldataElementsSBEDecodeError::Element(e))?;
+        let (element, remaining) =
+            CalldataElement::decode_sbe(rest).map_err(CalldataElementsSBEDecodeError::Element)?;
         elements.push(element);
         rest = remaining;
     }

@@ -126,7 +126,7 @@ impl LongVal {
 /// Implement `Commonable` for `LongVal`.
 impl Commonable for LongVal {
     fn maybe_common_value(&self) -> MaybeCommonValue {
-        MaybeCommonValue::Long(self.clone())
+        MaybeCommonValue::Long(*self)
     }
 
     fn maybe_common_value_type() -> MaybeCommonValueType {

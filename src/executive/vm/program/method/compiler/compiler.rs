@@ -53,7 +53,7 @@ impl MethodCompiler for ProgramMethod {
             method_bytes.extend(
                 opcode
                     .compile()
-                    .map_err(|e| MethodCompileError::OpcodeCompileError(e))?,
+                    .map_err(MethodCompileError::OpcodeCompileError)?,
             );
         }
 
@@ -119,14 +119,14 @@ impl MethodCompiler for ProgramMethod {
         let mut opcodes = Vec::<Opcode>::new();
         for _ in 0..opcodes_count {
             let opcode = Opcode::decompile(&mut bytecode_stream)
-                .map_err(|e| MethodDecompileError::OpcodeDecompileError(e))?;
+                .map_err(MethodDecompileError::OpcodeDecompileError)?;
 
             opcodes.push(opcode);
         }
 
         // Construct the method.
         let method = ProgramMethod::new(method_name, method_type, calldata_element_types, opcodes)
-            .map_err(|e| MethodDecompileError::MethodConstructError(e))?;
+            .map_err(MethodDecompileError::MethodConstructError)?;
 
         // Return the method.
         Ok(method)

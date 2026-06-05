@@ -328,7 +328,7 @@ impl ExecCtx {
                 .lock()
                 .await
                 .insert_batch_record(batch_record.clone())
-                .map_err(|error| ApplyChangesError::ArchivalManagerInsertBatchRecordError(error))?;
+                .map_err(ApplyChangesError::ArchivalManagerInsertBatchRecordError)?;
         }
 
         // 15 Flush the changes.
@@ -435,12 +435,11 @@ impl ExecCtx {
         // 17 Iterate one tx input to get the prev payload outpoint.
         let prev_payload_outpoint = {
             // 17.1 Iterate one tx input for the payload.
-            let bitcoin_tx_input = bitcoin_tx_inputs_iter
-                .next()
-                .ok_or(BatchExecutionError::FailedToIterAndGetPayloadTxInputError)?;
 
             // 17.2 Return the payload outpoint.
-            bitcoin_tx_input.clone()
+            bitcoin_tx_inputs_iter
+                .next()
+                .ok_or(BatchExecutionError::FailedToIterAndGetPayloadTxInputError)?
         };
 
         // 18 Check if the prev payload outpoint matches to the payload tip outpoint in the sync manager.
@@ -502,8 +501,7 @@ impl ExecCtx {
                 // 22.1 Iterate one tx input for the expired projector.
                 let expired_projector_outpoint = bitcoin_tx_inputs_iter
                     .next()
-                    .ok_or(BatchExecutionError::FailedToIterateExpiredProjectorsError)?
-                    .clone();
+                    .ok_or(BatchExecutionError::FailedToIterateExpiredProjectorsError)?;
 
                 // 22.2 Add the expired projector outpoint to the expired projector outpoints list.
                 expired_projector_outpoints.push(expired_projector_outpoint);

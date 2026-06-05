@@ -52,7 +52,7 @@ impl ParamsManager {
     /// Creates a new params manager.
     pub fn new(chain: Chain) -> Result<PARAMS_MANAGER, sled::Error> {
         // 1 Open params db.
-        let params_db_path = format!("storage/{}/params", chain.to_string());
+        let params_db_path = format!("storage/{}/params", chain);
         let params_db = sled::open(params_db_path)?;
 
         // 2 Start with the default params holder.
@@ -380,6 +380,6 @@ impl ParamsManager {
 
 /// Erases the params manager by db path.
 pub fn erase_params_manager(chain: Chain) {
-    let params_db_path = format!("storage/{}/params", chain.to_string());
+    let params_db_path = format!("storage/{}/params", chain);
     let _ = std::fs::remove_dir_all(params_db_path);
 }

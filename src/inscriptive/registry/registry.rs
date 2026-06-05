@@ -98,12 +98,12 @@ impl Registry {
     /// Constructs a fresh new registry.
     pub fn new(chain: Chain) -> Result<REGISTRY, RMConstructionError> {
         // 1 Open the accounts db.
-        let accounts_db_path = format!("storage/{}/registry/accounts", chain.to_string());
+        let accounts_db_path = format!("storage/{}/registry/accounts", chain);
         let accounts_db =
             sled::open(accounts_db_path).map_err(RMConstructionError::AccountsDBOpenError)?;
 
         // 2 Open the contracts db.
-        let contracts_db_path = format!("storage/{}/registry/contracts", chain.to_string());
+        let contracts_db_path = format!("storage/{}/registry/contracts", chain);
         let contracts_db =
             sled::open(contracts_db_path).map_err(RMConstructionError::ContractsDBOpenError)?;
 
@@ -191,7 +191,7 @@ impl Registry {
                     }
                     // 0x03 key byte represents the primary BLS key.
                     BLS_KEY_SPECIAL_DB_KEY => {
-                        if value.as_ref().len() > 0 {
+                        if !value.as_ref().is_empty() {
                             // Get the primary BLS key bytes.
                             let bls_key_bytes: [u8; 48] = value.as_ref().try_into().map_err(|_| {
                                 RMConstructionError::UnableToDeserializeAccountPrimaryBLSKeyBytesFromTreeValue(account_key, value.to_vec())
@@ -203,12 +203,12 @@ impl Registry {
                     }
                     // 0x04 key byte represents the secondary aggregation key.
                     SECONDARY_AGGREGATION_KEY_SPECIAL_DB_KEY => {
-                        if value.as_ref().len() > 0 {
+                        if !value.as_ref().is_empty() {
                             // Convert the value to a secondary aggregation key bytes.
                             let secondary_aggregation_key_bytes: Vec<u8> = value.as_ref().to_vec();
 
                             // If the secondary aggregation key bytes are not empty, update the secondary aggregation key.
-                            if secondary_aggregation_key_bytes.len() > 0 {
+                            if !secondary_aggregation_key_bytes.is_empty() {
                                 secondary_aggregation_key = Some(secondary_aggregation_key_bytes);
                             }
                         }
@@ -227,7 +227,7 @@ impl Registry {
                     }
                     // 0x06 key byte represents the account flame config.
                     ACCOUNT_FLAME_CONFIG_SPECIAL_DB_KEY => {
-                        if value.as_ref().len() > 0 {
+                        if !value.as_ref().is_empty() {
                             let flame_config_deserialized = FMAccountFlameConfig::from_bytes(value.as_ref())
                                 .ok_or(
                                     RMConstructionError::UnableToDeserializeAccountFlameConfigBytesFromTreeValue(
@@ -240,7 +240,7 @@ impl Registry {
                     }
                     // 0x07 key byte represents the projector config.
                     PROJECTOR_CONFIG_SPECIAL_DB_KEY => {
-                        if value.as_ref().len() > 0 {
+                        if !value.as_ref().is_empty() {
                             let projector_config_bytes: [u8; 32] =
                                 value.as_ref().try_into().map_err(|_| {
                                     RMConstructionError::UnableToDeserializeAccountProjectorConfigBytesFromTreeValue(
@@ -593,15 +593,13 @@ impl Registry {
         }
 
         // 2 Try to get from the delta's new accounts to register (ephemeral registrations).
-        if let Some((_, _, _, _, _, flame_config)) = self
+        if let Some((_, _, _, _, _, Some(flame_config))) = self
             .delta
             .new_accounts_to_register
             .iter()
             .find(|(key, _, _, _, _, _)| key == &account_key)
         {
-            if let Some(flame_config) = flame_config {
-                return Some(flame_config.clone());
-            }
+            return Some(flame_config.clone());
         }
 
         // 3 And then try to get from the permanent in-memory states.
@@ -1647,13 +1645,13 @@ impl Registry {
 /// Erases the registry manager by db paths.
 pub fn erase_registry(chain: Chain) {
     // Accounts db path.
-    let accounts_db_path = format!("storage/{}/registry/accounts", chain.to_string());
+    let accounts_db_path = format!("storage/{}/registry/accounts", chain);
 
     // Erase the accounts db path.
     let _ = std::fs::remove_dir_all(accounts_db_path);
 
     // Contracts db path.
-    let contracts_db_path = format!("storage/{}/registry/contracts", chain.to_string());
+    let contracts_db_path = format!("storage/{}/registry/contracts", chain);
 
     // Erase the contracts db path.
     let _ = std::fs::remove_dir_all(contracts_db_path);

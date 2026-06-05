@@ -24,7 +24,7 @@ pub async fn handle_socket(
 
             let mut package_kind_buffer = [0; 1];
             match tcp::read(
-                &mut *_socket,
+                &mut _socket,
                 &mut package_kind_buffer,
                 Some(IDLE_CLIENT_TIMEOUT),
             )
@@ -44,7 +44,7 @@ pub async fn handle_socket(
             let timeout_duration = PAYLOAD_READ_TIMEOUT;
 
             let mut timestamp_buffer = [0; 8];
-            match tcp::read(&mut *_socket, &mut timestamp_buffer, Some(timeout_duration)).await {
+            match tcp::read(&mut _socket, &mut timestamp_buffer, Some(timeout_duration)).await {
                 Ok(_) => (),
                 Err(tcp::TCPError::ConnErr) => break,
                 Err(tcp::TCPError::Timeout) => continue,
@@ -58,7 +58,7 @@ pub async fn handle_socket(
             };
 
             let mut payload_len_buffer = [0; 4];
-            match tcp::read(&mut *_socket, &mut payload_len_buffer, Some(remaining_time)).await {
+            match tcp::read(&mut _socket, &mut payload_len_buffer, Some(remaining_time)).await {
                 Ok(_) => (),
                 Err(tcp::TCPError::ConnErr) => break,
                 Err(tcp::TCPError::Timeout) => continue,
@@ -75,7 +75,7 @@ pub async fn handle_socket(
             match payload_len {
                 0 => continue,
                 _ => {
-                    match tcp::read(&mut *_socket, &mut payload_bufer, Some(remaining_time)).await {
+                    match tcp::read(&mut _socket, &mut payload_bufer, Some(remaining_time)).await {
                         Ok(_) => (),
                         Err(tcp::TCPError::ConnErr) => break,
                         Err(tcp::TCPError::Timeout) => continue,

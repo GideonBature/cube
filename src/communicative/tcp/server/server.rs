@@ -68,6 +68,6 @@ pub async fn run(
                 .await;
             });
         },
-        OperatingKind::Node => return,
+        OperatingKind::Node => (),
     }
 }

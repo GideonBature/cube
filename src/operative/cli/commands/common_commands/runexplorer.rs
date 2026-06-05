@@ -892,7 +892,7 @@ fn account_avatar_emoji(account_key: [u8; 32]) -> &'static str {
 fn explorer_format_u64_dec_groups(s: &str) -> String {
     let mut out = String::new();
     for (i, ch) in s.chars().enumerate() {
-        if i > 0 && (s.len() - i) % 3 == 0 {
+        if i > 0 && (s.len() - i).is_multiple_of(3) {
             out.push(',');
         }
         out.push(ch);
@@ -1451,7 +1451,7 @@ async fn page_account_section(
         html_escape(avatar_emoji),
         html_escape(&npub_short),
         account_vip_title_emoji_html,
-        hierarchy.to_string(),
+        hierarchy,
         html_escape(&nostr_profile_url),
         html_escape(&account_hex),
         html_escape(&account_hex),
@@ -1785,7 +1785,7 @@ async fn page_batches(State(st): State<ExplorerState>) -> Html<String> {
     let body = format!(
         r#"<h1><span class="badge">{}</span> Latest batches</h1>
 <table class="entries-table"><thead><tr><th>Height</th><th>Txid</th><th class="num">Number of Entries</th><th>Seen</th></tr></thead><tbody>{}</tbody></table>"#,
-        st.chain.to_string(),
+        st.chain,
         if table_rows.is_empty() {
             r#"<tr><td colspan="4">No batches in archival storage yet.</td></tr>"#.to_string()
         } else {
@@ -2092,7 +2092,7 @@ fn render_batch_page(chain: Chain, record: &BatchRecord) -> String {
         txid_cell,
         txid,
         {
-            let bls_full = hex::encode(&record.aggregate_bls_signature);
+            let bls_full = hex::encode(record.aggregate_bls_signature);
             expandable_mono_html(&bls_full, 28, 16, "bls-agg-sig")
         },
         record.payload_version,

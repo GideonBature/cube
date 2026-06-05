@@ -128,9 +128,9 @@ fn comp_program(parts: Vec<&str>) {
     println!("0x{}", hex::encode(compiled));
 }
 
-fn parse_comp_program_arguments<'a>(
-    parts: &'a Vec<&'a str>,
-) -> Option<(String, Option<Vec<u8>>, usize, &'a [&'a str])> {
+type CompProgramArguments<'a> = (String, Option<Vec<u8>>, usize, &'a [&'a str]);
+
+fn parse_comp_program_arguments<'a>(parts: &'a [&'a str]) -> Option<CompProgramArguments<'a>> {
     // Expected minimum:
     // comp program <program_name> <metadata> <num_methods>
     if parts.len() < 5 {

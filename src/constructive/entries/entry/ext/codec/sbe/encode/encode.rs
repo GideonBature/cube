@@ -22,7 +22,7 @@ impl Entry {
             // 1.b The `Entry` is a `Liftup` — SBE is the `Liftup` encoding (leading `0x04` is inside `Liftup::encode_sbe`).
             Entry::Liftup(liftup) => liftup
                 .encode_sbe()
-                .map_err(|err| EntrySBEEncodeError::LiftupSBEEncodeError(err)),
+                .map_err(EntrySBEEncodeError::LiftupSBEEncodeError),
             Entry::Swapout(swapout) => swapout
                 .encode_sbe()
                 .map_err(EntrySBEEncodeError::SwapoutSBEEncodeError),

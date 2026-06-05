@@ -56,7 +56,7 @@ impl Entry {
                         base_ops_price,
                     )
                     .await
-                    .map_err(|e| EntryAPEEncodeError::CallAPEEncodeError(e))?;
+                    .map_err(EntryAPEEncodeError::CallAPEEncodeError)?;
 
                 // 2.a.3 Extend the `Entry` APE bit vector with the `Call` APE bit vector.
                 bits.extend(call_bits);
@@ -78,7 +78,7 @@ impl Entry {
                         encode_account_rank_as_longval,
                     )
                     .await
-                    .map_err(|e| EntryAPEEncodeError::LiftupAPEEncodeError(e))?;
+                    .map_err(EntryAPEEncodeError::LiftupAPEEncodeError)?;
 
                 // 2.b.3 Extend the `Entry` APE bit vector with the `Liftup` APE bit vector.
                 bits.extend(liftup_bits);

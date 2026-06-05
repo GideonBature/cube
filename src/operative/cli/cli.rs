@@ -676,7 +676,7 @@ fn parse_cli_parts(line: Result<String, io::Error>) -> Option<Vec<String>> {
     let line = match line {
         Ok(line) => line,
         Err(_) => {
-            eprintln!("{}", format!("Invalid line.").yellow());
+            eprintln!("{}", "Invalid line.".to_string().yellow());
             return None;
         }
     };
@@ -746,13 +746,13 @@ fn parse_hex_bytes(s: &str) -> Option<Vec<u8>> {
     hex::decode(s.trim_start_matches("0x")).ok()
 }
 
-fn parse_config_fields(
-    args: &[String],
-) -> Option<(
+type ConfigFields = (
     Option<Vec<u8>>,
     Option<[u8; 32]>,
     Option<FMAccountFlameConfig>,
-)> {
+);
+
+fn parse_config_fields(args: &[String]) -> Option<ConfigFields> {
     let mut sak: Option<Vec<u8>> = None;
     let mut pc: Option<[u8; 32]> = None;
     let mut fc: Option<FMAccountFlameConfig> = None;

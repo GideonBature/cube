@@ -47,7 +47,7 @@ impl OP_BLAKE2BVAR {
             .map_err(|_| StackError::BLAKE2bVarOutputSizeError)?;
 
         // Update the hasher with the preimage.
-        hasher.update(&preimage.bytes());
+        hasher.update(preimage.bytes());
 
         // Create a buffer to store the hash.
         let mut output_buffer = vec![0u8; output_size_as_usize];

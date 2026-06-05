@@ -43,7 +43,7 @@ impl OP_SHADOW_UP_ALL {
             let mut _coin_manager = coin_manager.lock().await;
             _coin_manager
                 .shadow_up_all(self_contract_id_bytes, amount_as_u64)
-                .map_err(|error| ShadowOpsError::ShadowAllocUpAllError(error))
+                .map_err(ShadowOpsError::ShadowAllocUpAllError)
                 .map_err(StackError::ShadowOpsError)?;
         }
 

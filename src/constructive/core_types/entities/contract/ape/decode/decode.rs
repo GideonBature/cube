@@ -18,19 +18,18 @@ impl Contract {
             // 1.a The rank is decoded as a `LongVal`.
             true => {
                 // 1.a.1 Decode the rank value as a `LongVal`.
-                let rank = LongVal::decode_ape(bit_stream)
-                    .map_err(|e| ContractAPEDecodeError::FailedToDecodeRankValueAsLongVal(e))?
-                    .value();
 
                 // 1.a.2 Return the rank value as a `u64`.
-                rank
+                LongVal::decode_ape(bit_stream)
+                    .map_err(ContractAPEDecodeError::FailedToDecodeRankValueAsLongVal)?
+                    .value()
             }
 
             // 1.b The rank is decoded as a `ShortVal`.
             false => {
                 // 1.b.1 Decode the rank value as a `ShortVal`.
                 let rank = ShortVal::decode_ape(bit_stream)
-                    .map_err(|e| ContractAPEDecodeError::FailedToDecodeRankValueAsShortVal(e))?
+                    .map_err(ContractAPEDecodeError::FailedToDecodeRankValueAsShortVal)?
                     .value();
 
                 // 1.b.2 Return the rank value as a `u64`.

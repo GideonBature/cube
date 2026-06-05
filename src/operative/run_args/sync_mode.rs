@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// Sync inflight type.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum SyncMode {
@@ -5,11 +7,11 @@ pub enum SyncMode {
     ConfirmedOnly,
 }
 
-impl ToString for SyncMode {
-    fn to_string(&self) -> String {
-        match self {
-            SyncMode::InFlight => "in-flight".to_string(),
-            SyncMode::ConfirmedOnly => "confirmed-only".to_string(),
-        }
+impl fmt::Display for SyncMode {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            SyncMode::InFlight => "in-flight",
+            SyncMode::ConfirmedOnly => "confirmed-only",
+        })
     }
 }

@@ -105,7 +105,7 @@ pub fn get_mempool_min_fee_rate(
     // Bitcoin Core returns mempool minimum fee as BTC/kvB.
     // Convert BTC/kvB -> sat/kvB -> sat/vbyte, rounded up to avoid underpaying.
     let mempool_min_fee_sat_per_kvb = mempool_info.mempool_min_fee.to_sat();
-    let mempool_min_fee_sat_per_vbyte = ((mempool_min_fee_sat_per_kvb + 999) / 1000).max(1);
+    let mempool_min_fee_sat_per_vbyte = mempool_min_fee_sat_per_kvb.div_ceil(1000).max(1);
 
     Ok(mempool_min_fee_sat_per_vbyte)
 }

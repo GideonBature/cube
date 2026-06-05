@@ -129,7 +129,7 @@ impl CalldataElement {
             }
             CalldataElementType::Bytes(index) => {
                 let byte_length = index as usize + 1;
-                if byte_length < 1 || byte_length > 256 {
+                if !(1..=256).contains(&byte_length) {
                     return Err(CalldataElementSBEDecodeError::Bytes(
                         BytesSBEDecodeError::InvalidBytesLength(byte_length),
                     ));

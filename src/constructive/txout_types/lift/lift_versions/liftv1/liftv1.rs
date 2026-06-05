@@ -52,7 +52,7 @@ impl LiftV1 {
         let self_scriptpubkey = self.txout.script_pubkey.as_bytes();
 
         // 3 Validate the scriptpubkeys.
-        if &calculated_scriptpubkey != self_scriptpubkey {
+        if calculated_scriptpubkey != self_scriptpubkey {
             return false;
         }
 

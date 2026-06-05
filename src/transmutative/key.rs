@@ -143,10 +143,7 @@ impl KeyHolder {
         // 5.1.1 Zeroize the temporary BLS secret key bytes immediately after use.
         bls_secret_key_bytes_.zeroize();
         // 5.2 Compute BLS public key from BLS secret key.
-        let bls_public_key: BLSPublicKey = match bls_secret_key_to_bls_public_key(bls_secret_key) {
-            Some(bls_public_key) => bls_public_key,
-            None => return None,
-        };
+        let bls_public_key: BLSPublicKey = bls_secret_key_to_bls_public_key(bls_secret_key)?;
         // 5.3 Serialize BLS public key to 48 bytes.
         let bls_public_key_bytes: [u8; 48] = match bls_public_key.try_into() {
             Ok(bls_public_key_bytes) => bls_public_key_bytes,

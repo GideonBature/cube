@@ -44,7 +44,7 @@ mod simul_tests {
     use cube::operative::tasks::engine_session::session_pool::session_pool::SessionPool;
     use cube::operative::tasks::engine_session::session_pool::session_pool::SESSION_POOL;
     use cube::transmutative::key::KeyHolder;
-    use hex;
+
     use serde_json::to_string_pretty;
     use std::sync::Arc;
 
@@ -67,14 +67,14 @@ mod simul_tests {
         // 3 Construct self secret key.
         let secret_key: [u8; 32] =
             hex::decode("2795044ce0f83f718bc79c5f2add1e52521978df91ce9b7f82c9097191d33602")
-                .map_err(|_| format!("Failed to parse secret key hex."))?
+                .map_err(|_| "Failed to parse secret key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Failed to convert secret key hex.".to_string())?;
 
         // 4 Construct self public key.
         let public_key: [u8; 32] =
             hex::decode("d0ea35e4a5d654109aef6b175672ea98099212a42d028fcf8bd4e38c137ff15a")
-                .map_err(|_| format!("Failed to parse public key hex."))?
+                .map_err(|_| "Failed to parse public key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Failed to convert public key hex.".to_string())?;
 

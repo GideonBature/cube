@@ -76,7 +76,7 @@ pub type COIN_MANAGER = Arc<Mutex<CoinManager>>;
 impl CoinManager {
     pub fn new(chain: Chain) -> Result<COIN_MANAGER, CMConstructionError> {
         // 1 Open the accounts db.
-        let accounts_db_path = format!("storage/{}/coins/accounts", chain.to_string());
+        let accounts_db_path = format!("storage/{}/coins/accounts", chain);
         let accounts_db = sled::open(accounts_db_path).map_err(|e| {
             CMConstructionError::AccountConstructionError(CMConstructionAccountError::DBOpenError(
                 e,
@@ -84,7 +84,7 @@ impl CoinManager {
         })?;
 
         // 2 Open the contracts db.
-        let contracts_db_path = format!("storage/{}/coins/contracts", chain.to_string());
+        let contracts_db_path = format!("storage/{}/coins/contracts", chain);
         let contracts_db = sled::open(contracts_db_path).map_err(|e| {
             CMConstructionError::ContractConstructionError(
                 CMConstructionContractError::DBOpenError(e),
@@ -405,7 +405,7 @@ impl CoinManager {
     pub fn get_account_balance(&self, account_key: AccountKey) -> Option<u64> {
         // 1 Try to get from the delta first.
         if let Some(value) = self.delta.updated_account_balances.get(&account_key) {
-            return Some(value.clone());
+            return Some(*value);
         }
 
         // 2 And then try to get from the permanent in-memory states.
@@ -418,7 +418,7 @@ impl CoinManager {
     pub fn get_contract_balance(&self, contract_id: ContractId) -> Option<u64> {
         // 1 Try to get from the delta first.
         if let Some(value) = self.delta.updated_contract_balances.get(&contract_id) {
-            return Some(value.clone());
+            return Some(*value);
         }
 
         // 2 And then try to get from the permanent in-memory states.
@@ -439,7 +439,7 @@ impl CoinManager {
             .updated_global_shadow_allocs_sums
             .get(&account_key)
         {
-            return Some(value.clone());
+            return Some(*value);
         }
 
         // 2 And then try to get from the permanent in-memory states.
@@ -507,7 +507,7 @@ impl CoinManager {
             let base_allocs_sum_in_sati_satoshis =
                 (base_allocs_sum_in_satoshis as u128) * ONE_SATOSHI_IN_SATI_SATOSHIS;
             let deferred_change_in_sati_satoshis =
-                (deferred_change_in_satoshis.abs() as u128) * ONE_SATOSHI_IN_SATI_SATOSHIS;
+                (deferred_change_in_satoshis.unsigned_abs() as u128) * ONE_SATOSHI_IN_SATI_SATOSHIS;
 
             // 2.6 Calculate the proportional change for this account in this contract.
             let individual_change_in_sati_satoshis = if deferred_change_in_satoshis > 0 {
@@ -678,7 +678,7 @@ impl CoinManager {
 
             // 2.8 Convert the deferred change in satoshis to sati-satoshis.
             let deferred_change_in_sati_satoshis =
-                (deferred_change_in_satoshis.abs() as u128) * ONE_SATOSHI_IN_SATI_SATOSHIS;
+                (deferred_change_in_satoshis.unsigned_abs() as u128) * ONE_SATOSHI_IN_SATI_SATOSHIS;
 
             // 2.9 Calculate the proportional change for this account (matching apply_changes logic).
             let individual_change_in_sati_satoshis = if deferred_change_in_satoshis > 0 {
@@ -1708,7 +1708,8 @@ impl CoinManager {
                     let base_allocs_sum_in_sati_satoshis =
                         (base_allocs_sum_in_satoshis as u128) * ONE_SATOSHI_IN_SATI_SATOSHIS;
                     let deferred_change_in_sati_satoshis =
-                        (deferred_change_in_satoshis.abs() as u128) * ONE_SATOSHI_IN_SATI_SATOSHIS;
+                        (deferred_change_in_satoshis.unsigned_abs() as u128)
+                            * ONE_SATOSHI_IN_SATI_SATOSHIS;
 
                     // 5.1.4 Iterate over all allocations and apply proportional changes.
                     let allocs_copy: Vec<(AccountKey, SatiSatoshiAmount)> =
@@ -1874,7 +1875,7 @@ impl CoinManager {
                 {
                     // Update the shadow alloc value on-disk.
                     tree.insert(
-                        shadow_account_key.to_vec(),
+                        shadow_account_key,
                         shadow_alloc_value.to_le_bytes().to_vec(),
                     )
                     .map_err(|e| {
@@ -2055,13 +2056,13 @@ impl CoinManager {
 /// Erases the coin manager by db paths.
 pub fn erase_coin_manager(chain: Chain) {
     // Accounts db path.
-    let accounts_db_path = format!("storage/{}/coins/accounts", chain.to_string());
+    let accounts_db_path = format!("storage/{}/coins/accounts", chain);
 
     // Erase the accounts db path.
     let _ = std::fs::remove_dir_all(accounts_db_path);
 
     // Contracts db path.
-    let contracts_db_path = format!("storage/{}/coins/contracts", chain.to_string());
+    let contracts_db_path = format!("storage/{}/coins/contracts", chain);
 
     // Erase the contracts db path.
     let _ = std::fs::remove_dir_all(contracts_db_path);

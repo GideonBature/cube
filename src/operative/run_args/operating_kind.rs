@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// Operating kind type.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum OperatingKind {
@@ -5,11 +7,11 @@ pub enum OperatingKind {
     Engine,
 }
 
-impl ToString for OperatingKind {
-    fn to_string(&self) -> String {
-        match self {
-            OperatingKind::Node => "node".to_string(),
-            OperatingKind::Engine => "engine".to_string(),
-        }
+impl fmt::Display for OperatingKind {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            OperatingKind::Node => "node",
+            OperatingKind::Engine => "engine",
+        })
     }
 }

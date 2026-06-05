@@ -62,9 +62,7 @@ impl CalldataElementType {
             Some(0x04) => Some(CalldataElementType::Bool),
             Some(0x05) => Some(CalldataElementType::Account),
             Some(0x06) => Some(CalldataElementType::Contract),
-            Some(0x07) => bytecode_stream
-                .next()
-                .map(|index| CalldataElementType::Bytes(index)),
+            Some(0x07) => bytecode_stream.next().map(CalldataElementType::Bytes),
             Some(0x08) => Some(CalldataElementType::Varbytes),
             Some(0x09) => Some(CalldataElementType::Payable),
             _ => None,
