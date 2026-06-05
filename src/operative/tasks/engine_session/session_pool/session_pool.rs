@@ -22,10 +22,10 @@ use crate::inscriptive::registry::registry::REGISTRY;
 use crate::inscriptive::state_manager::state_manager::STATE_MANAGER;
 use crate::inscriptive::sync_manager::sync_manager::SYNC_MANAGER;
 use crate::inscriptive::utxo_set::utxo_set::UTXO_SET;
-use crate::operative::tasks::engine_session::session_pool::error::exec_liftup_in_pool_error::ExecLiftupInPoolError;
-use crate::operative::tasks::engine_session::session_pool::error::exec_move_in_pool_error::ExecMoveInPoolError;
 use crate::operative::tasks::engine_session::session_pool::error::exec_config_in_pool_error::ExecConfigInPoolError;
 use crate::operative::tasks::engine_session::session_pool::error::exec_deploy_in_pool_error::ExecDeployInPoolError;
+use crate::operative::tasks::engine_session::session_pool::error::exec_liftup_in_pool_error::ExecLiftupInPoolError;
+use crate::operative::tasks::engine_session::session_pool::error::exec_move_in_pool_error::ExecMoveInPoolError;
 use crate::operative::tasks::engine_session::session_pool::error::exec_swapout_in_pool_error::ExecSwapoutInPoolError;
 use crate::operative::tasks::engine_session::session_pool::error::into_batch_container_error::IntoBatchContainerError;
 use crate::transmutative::bls::agg::bls_aggregate;
@@ -390,7 +390,7 @@ impl SessionPool {
         &mut self,
         liftup: &Liftup,
         liftup_bls_signature: [u8; 96],
-    ) -> Result<(EntryId, Entry,  BatchHeight, BatchTimestamp), ExecLiftupInPoolError> {
+    ) -> Result<(EntryId, Entry, BatchHeight, BatchTimestamp), ExecLiftupInPoolError> {
         // 1 Check the pool session status.
         match self.state {
             // 1.a The session is inactive.
@@ -568,7 +568,9 @@ impl SessionPool {
                     self.exec_ctx.lock().await.rollback_last().await;
                 }
                 // 5.b.2 Return the error.
-                Err(ExecMoveInPoolError::MoveExecutionError(format!("{error:?}")))
+                Err(ExecMoveInPoolError::MoveExecutionError(format!(
+                    "{error:?}"
+                )))
             }
         }
     }
@@ -580,7 +582,9 @@ impl SessionPool {
     ) -> Result<(EntryId, Entry, BatchHeight, BatchTimestamp), ExecSwapoutInPoolError> {
         match self.state {
             SessionPoolState::Inactive => return Err(ExecSwapoutInPoolError::SessionInactiveError),
-            SessionPoolState::Suspended => return Err(ExecSwapoutInPoolError::SessionSuspendedError),
+            SessionPoolState::Suspended => {
+                return Err(ExecSwapoutInPoolError::SessionSuspendedError)
+            }
             SessionPoolState::Break => return Err(ExecSwapoutInPoolError::SessionBreakError),
             _ => {
                 if self.added_entries.len() >= MAX_IN_POOL_ENTRIES {
@@ -602,7 +606,9 @@ impl SessionPool {
                 swapout_bls_signature,
             )
             .await
-            .map_err(|err| ExecSwapoutInPoolError::SwapoutValidateOverallError(format!("{err:?}")))?;
+            .map_err(|err| {
+                ExecSwapoutInPoolError::SwapoutValidateOverallError(format!("{err:?}"))
+            })?;
 
         {
             let mut _exec_ctx = self.exec_ctx.lock().await;
@@ -643,7 +649,9 @@ impl SessionPool {
     ) -> Result<(EntryId, Entry, BatchHeight, BatchTimestamp), ExecConfigInPoolError> {
         match self.state {
             SessionPoolState::Inactive => return Err(ExecConfigInPoolError::SessionInactiveError),
-            SessionPoolState::Suspended => return Err(ExecConfigInPoolError::SessionSuspendedError),
+            SessionPoolState::Suspended => {
+                return Err(ExecConfigInPoolError::SessionSuspendedError)
+            }
             SessionPoolState::Break => return Err(ExecConfigInPoolError::SessionBreakError),
             _ => {
                 if self.added_entries.len() >= MAX_IN_POOL_ENTRIES {
@@ -664,7 +672,9 @@ impl SessionPool {
             .root_account
             .validate_root_account(&self.registry, &self.graveyard)
             .await
-            .map_err(|err| ExecConfigInPoolError::ConfigValidateRootAccountError(format!("{err:?}")))?;
+            .map_err(|err| {
+                ExecConfigInPoolError::ConfigValidateRootAccountError(format!("{err:?}"))
+            })?;
 
         if let Err((targeted_at_batch_height, execution_batch_height)) =
             config.target.validate(batch_height)
@@ -714,7 +724,9 @@ impl SessionPool {
     ) -> Result<(EntryId, Entry, BatchHeight, BatchTimestamp), ExecDeployInPoolError> {
         match self.state {
             SessionPoolState::Inactive => return Err(ExecDeployInPoolError::SessionInactiveError),
-            SessionPoolState::Suspended => return Err(ExecDeployInPoolError::SessionSuspendedError),
+            SessionPoolState::Suspended => {
+                return Err(ExecDeployInPoolError::SessionSuspendedError)
+            }
             SessionPoolState::Break => return Err(ExecDeployInPoolError::SessionBreakError),
             _ => {
                 if self.added_entries.len() >= MAX_IN_POOL_ENTRIES {
@@ -740,7 +752,9 @@ impl SessionPool {
             .root_account
             .validate_root_account(&self.registry, &self.graveyard)
             .await
-            .map_err(|err| ExecDeployInPoolError::DeployValidateRootAccountError(format!("{err:?}")))?;
+            .map_err(|err| {
+                ExecDeployInPoolError::DeployValidateRootAccountError(format!("{err:?}"))
+            })?;
 
         if let Err((targeted_at_batch_height, execution_batch_height)) =
             deploy.target.validate(batch_height)

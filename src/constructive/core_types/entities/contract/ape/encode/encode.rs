@@ -26,9 +26,9 @@ impl Contract {
             let _registry = registry.lock().await;
 
             // 3.2 Retrieve the rank value from the registry.
-            _registry.get_rank_by_contract_id(contract_id).ok_or(
-                ContractAPEEncodeError::UnableToRetrieveRankValueFromRegistry(contract_id),
-            )?
+            _registry
+                .get_rank_by_contract_id(contract_id)
+                .ok_or(ContractAPEEncodeError::UnableToRetrieveRankValueFromRegistry(contract_id))?
         };
 
         // 4 Match on whether to encode the rank value as a `LongVal` or a `ShortVal`.

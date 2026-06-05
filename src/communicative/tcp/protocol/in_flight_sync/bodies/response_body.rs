@@ -74,7 +74,10 @@ impl InFlightSyncResponseBody {
             }
             InFlightSyncResponseBody::BatchDownload(batch_container) => {
                 let mut result = Map::new();
-                result.insert("kind".to_string(), Value::String("batch_download".to_string()));
+                result.insert(
+                    "kind".to_string(),
+                    Value::String("batch_download".to_string()),
+                );
                 result.insert("batch_container".to_string(), batch_container.json());
 
                 let mut obj = Map::new();

@@ -104,9 +104,8 @@ mod batchtxn_test {
             .serialize_xonly();
 
         // 13 Encode the tweaked key for the payload to fund into an address.
-        let payload_to_fund_taproot_address =
-            encode_p2tr(chain, payload_to_fund_taproot_key)
-                .expect("Failed to encode taproot address.");
+        let payload_to_fund_taproot_address = encode_p2tr(chain, payload_to_fund_taproot_key)
+            .expect("Failed to encode taproot address.");
 
         println!(
             "Payload to fund taproot address: {}",
@@ -140,9 +139,8 @@ mod batchtxn_test {
             Some(prev_payload_location),
         );
 
-        let liftv1_address =
-            return_liftv1_address(chain, user_public_key, engine_public_key)
-                .expect("Failed to get liftv1 address.");
+        let liftv1_address = return_liftv1_address(chain, user_public_key, engine_public_key)
+            .expect("Failed to get liftv1 address.");
 
         println!("Liftv1 address: {}", liftv1_address);
 

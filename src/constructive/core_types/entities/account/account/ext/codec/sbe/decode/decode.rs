@@ -32,9 +32,10 @@ impl Account {
                 }
 
                 // 4.a.2 Decode the account key to be registered.
-                let account_key_to_be_registered: [u8; 32] = payload[0..32]
-                    .try_into()
-                    .map_err(|_| AccountSBEDecodeError::UnregisteredAccountSBEAccountKeyBytesConversionError)?;
+                let account_key_to_be_registered: [u8; 32] =
+                    payload[0..32].try_into().map_err(|_| {
+                        AccountSBEDecodeError::UnregisteredAccountSBEAccountKeyBytesConversionError
+                    })?;
 
                 // 4.a.3 Ensure no trailing bytes after the account key.
                 if payload.len() != 32 {
@@ -63,9 +64,9 @@ impl Account {
                 }
 
                 // 4.b.2 Decode the account key.
-                let account_key: [u8; 32] = payload[0..32]
-                    .try_into()
-                    .map_err(|_| AccountSBEDecodeError::RegisteredAccountSBEAccountKeyBytesConversionError)?;
+                let account_key: [u8; 32] = payload[0..32].try_into().map_err(|_| {
+                    AccountSBEDecodeError::RegisteredAccountSBEAccountKeyBytesConversionError
+                })?;
 
                 // 4.b.3 Ensure the payload holds the 8-byte little-endian registry index after the key.
                 if payload.len() < 32 + 8 {
@@ -77,11 +78,10 @@ impl Account {
                 }
 
                 // 4.b.4 Decode the registry index.
-                let registry_index = u64::from_le_bytes(
-                    payload[32..40]
-                        .try_into()
-                        .map_err(|_| AccountSBEDecodeError::RegisteredAccountSBERegistryIndexBytesConversionError)?,
-                );
+                let registry_index =
+                    u64::from_le_bytes(payload[32..40].try_into().map_err(|_| {
+                        AccountSBEDecodeError::RegisteredAccountSBERegistryIndexBytesConversionError
+                    })?);
 
                 // 4.b.5 Ensure no trailing bytes after the registry index.
                 if payload.len() != 32 + 8 {

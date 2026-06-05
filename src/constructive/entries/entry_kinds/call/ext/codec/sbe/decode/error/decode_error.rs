@@ -9,33 +9,52 @@ use crate::constructive::entity::contract::ext::codec::sbe::decode::error::decod
 /// Errors that can occur when decoding a `Call` from Structural Byte-scope Encoding (SBE) bytes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum CallSBEDecodeError {
-    InvalidEntryKindByteError { expected: u8, got: u8 },
-    CallSBEInsufficientBytesForRootAccountLengthPrefix { got_total: usize },
+    InvalidEntryKindByteError {
+        expected: u8,
+        got: u8,
+    },
+    CallSBEInsufficientBytesForRootAccountLengthPrefix {
+        got_total: usize,
+    },
     CallSBELengthPrefixBytesConversionError,
     CallSBERootAccountLengthPrefixExceedsPayload {
         root_len: usize,
         got_after_prefix: usize,
     },
     CallSBERootAccount(RootAccountSBEDecodeError),
-    CallSBEInsufficientBytesForContractLengthPrefix { got_total: usize },
+    CallSBEInsufficientBytesForContractLengthPrefix {
+        got_total: usize,
+    },
     CallSBEContractLengthPrefixExceedsPayload {
         contract_len: usize,
         got_after_prefix: usize,
     },
     CallSBEContract(ContractSBEDecodeError),
-    CallSBEInsufficientBytesForMethodIndex { got_total: usize },
+    CallSBEInsufficientBytesForMethodIndex {
+        got_total: usize,
+    },
     CallSBEMethodIndex(MethodIndexSBEDecodeError),
-    CallSBEInsufficientBytesForCalldataLengthPrefix { got_total: usize },
+    CallSBEInsufficientBytesForCalldataLengthPrefix {
+        got_total: usize,
+    },
     CallSBECalldataLengthPrefixExceedsPayload {
         calldata_len: usize,
         got_after_prefix: usize,
     },
     CallSBECalldata(CalldataElementsSBEDecodeError),
-    CallSBEInsufficientBytesForOpsBudget { got_total: usize },
+    CallSBEInsufficientBytesForOpsBudget {
+        got_total: usize,
+    },
     CallSBEOpsBudget(OpsBudgetSBEDecodeError),
-    CallSBEInsufficientBytesForOpsPrice { got_total: usize },
+    CallSBEInsufficientBytesForOpsPrice {
+        got_total: usize,
+    },
     CallSBEOpsPrice(OpsPriceSBEDecodeError),
-    CallSBEInsufficientBytesForTarget { got_total: usize },
+    CallSBEInsufficientBytesForTarget {
+        got_total: usize,
+    },
     CallSBETarget(TargetSBEDecodeError),
-    CallSBETrailingBytesAfterCall { trailing: usize },
+    CallSBETrailingBytesAfterCall {
+        trailing: usize,
+    },
 }

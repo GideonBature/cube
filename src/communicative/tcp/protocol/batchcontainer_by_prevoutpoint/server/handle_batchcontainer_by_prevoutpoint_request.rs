@@ -13,21 +13,20 @@ pub async fn handle_batchcontainer_by_prevoutpoint_request(
     // 1 Deserialize the request body.
     let BatchContainerByPrevOutpointRequestBody {
         prev_payload_outpoint,
-    } =
-        match BatchContainerByPrevOutpointRequestBody::deserialize(payload) {
-            Some(req) => req,
-            None => {
-                let body = BatchContainerByPrevOutpointResponseBody::err(
+    } = match BatchContainerByPrevOutpointRequestBody::deserialize(payload) {
+        Some(req) => req,
+        None => {
+            let body = BatchContainerByPrevOutpointResponseBody::err(
                     BatchContainerByPrevOutpointResponseError::DeserializeBatchContainerByPrevOutpointRequestError,
                 );
-                let bytes = body.serialize().unwrap_or_default();
-                return Some(TCPPackage::new(
-                    PackageKind::BatchContainerByPrevOutpointProtocol,
-                    timestamp,
-                    &bytes,
-                ));
-            }
-        };
+            let bytes = body.serialize().unwrap_or_default();
+            return Some(TCPPackage::new(
+                PackageKind::BatchContainerByPrevOutpointProtocol,
+                timestamp,
+                &bytes,
+            ));
+        }
+    };
 
     // 2 Resolve the batch container from the archival manager (if configured).
     let response_body = match archival_manager {

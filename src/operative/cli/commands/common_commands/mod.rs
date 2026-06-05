@@ -1,5 +1,5 @@
-pub mod coinmanager;
 pub mod clear;
+pub mod coinmanager;
 pub mod engine;
 pub mod flamemanager;
 pub mod graveyard;

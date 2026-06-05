@@ -1,10 +1,6 @@
 mod peer_tcp_client;
 mod tcp_client;
 
-pub use crate::communicative::tcp::protocol::batchrecord::{
-    BatchRecordRequestBody, BatchRecordResponseBody, BatchRecordResponseError,
-    BatchRecordSuccessBody,
-};
 pub use crate::communicative::tcp::protocol::batchcontainer::{
     BatchContainerRequestBody, BatchContainerResponseBody, BatchContainerResponseError,
     BatchContainerSuccessBody,
@@ -12,6 +8,18 @@ pub use crate::communicative::tcp::protocol::batchcontainer::{
 pub use crate::communicative::tcp::protocol::batchcontainer_by_prevoutpoint::{
     BatchContainerByPrevOutpointRequestBody, BatchContainerByPrevOutpointResponseBody,
     BatchContainerByPrevOutpointResponseError, BatchContainerByPrevOutpointSuccessBody,
+};
+pub use crate::communicative::tcp::protocol::batchrecord::{
+    BatchRecordRequestBody, BatchRecordResponseBody, BatchRecordResponseError,
+    BatchRecordSuccessBody,
+};
+pub use crate::communicative::tcp::protocol::config::{
+    ConfigRequestBody, ConfigResponseBody, ConfigResponseError, ConfigSuccessBody,
+    ExecConfigInPoolError,
+};
+pub use crate::communicative::tcp::protocol::deploy::{
+    DeployRequestBody, DeployResponseBody, DeployResponseError, DeploySuccessBody,
+    ExecDeployInPoolError,
 };
 pub use crate::communicative::tcp::protocol::in_flight_sync::{
     InFlightSyncRequestBody, InFlightSyncResponseBody, InFlightSyncResponseError,
@@ -22,13 +30,6 @@ pub use crate::communicative::tcp::protocol::liftup_v1::{
 };
 pub use crate::communicative::tcp::protocol::r#move::{
     ExecMoveInPoolError, MoveRequestBody, MoveResponseBody, MoveResponseError, MoveSuccessBody,
-};
-pub use crate::communicative::tcp::protocol::config::{
-    ExecConfigInPoolError, ConfigRequestBody, ConfigResponseBody, ConfigResponseError, ConfigSuccessBody,
-};
-pub use crate::communicative::tcp::protocol::deploy::{
-    DeployRequestBody, DeployResponseBody, DeployResponseError, DeploySuccessBody,
-    ExecDeployInPoolError,
 };
 pub use crate::communicative::tcp::protocol::swapout::{
     ExecSwapoutInPoolError, SwapoutRequestBody, SwapoutResponseBody, SwapoutResponseError,

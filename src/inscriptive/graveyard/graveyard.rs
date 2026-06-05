@@ -159,9 +159,7 @@ impl Graveyard {
 
         // 2 Check if the account has already been permanently buried.
         if self.in_memory_buried_accounts.contains_key(&account_key) {
-            return Err(
-                GraveyardBuryAccountError::AccountIsAlreadyPermanentlyBuried(account_key),
-            );
+            return Err(GraveyardBuryAccountError::AccountIsAlreadyPermanentlyBuried(account_key));
         }
 
         // 3 Epheremally bury the account in the delta.

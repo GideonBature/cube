@@ -15,9 +15,10 @@ impl Swapout {
         decode_account_rank_as_longval: bool,
         registry: &REGISTRY,
     ) -> Result<Self, SwapoutAPEDecodeError> {
-        let root_account = RootAccount::decode_ape(bit_stream, decode_account_rank_as_longval, registry)
-            .await
-            .map_err(|_| SwapoutAPEDecodeError::RootAccountAPEDecodeError)?;
+        let root_account =
+            RootAccount::decode_ape(bit_stream, decode_account_rank_as_longval, registry)
+                .await
+                .map_err(|_| SwapoutAPEDecodeError::RootAccountAPEDecodeError)?;
         let target = Target::decode_ape(bit_stream, execution_batch_height)
             .map_err(|_| SwapoutAPEDecodeError::TargetAPEDecodeError)?;
         let default_or_unknown_bit = bit_stream
@@ -31,7 +32,10 @@ impl Swapout {
             .map_err(|_| SwapoutAPEDecodeError::SwapoutTxOutputCollectError)?;
 
         let pinless_self = if default_or_unknown_bit {
-            PinlessSelf::new_unknown(txout.script_pubkey.as_bytes().to_vec(), Some((outpoint, txout)))
+            PinlessSelf::new_unknown(
+                txout.script_pubkey.as_bytes().to_vec(),
+                Some((outpoint, txout)),
+            )
         } else {
             PinlessSelf::new_default(root_account.account_key(), Some((outpoint, txout)))
         };

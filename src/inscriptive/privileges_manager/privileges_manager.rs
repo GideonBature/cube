@@ -438,15 +438,13 @@ impl PrivilegesManager {
         account_body: PrivilegesManagerAccountBody,
     ) -> Result<(), PMRegisterAccountError> {
         if self.is_account_ephemerally_registered(account_key) {
-            return Err(PMRegisterAccountError::AccountHasJustBeenEphemerallyRegistered(
-                account_key,
-            ));
+            return Err(
+                PMRegisterAccountError::AccountHasJustBeenEphemerallyRegistered(account_key),
+            );
         }
 
         if self.is_account_permanently_registered(account_key) {
-            return Err(PMRegisterAccountError::AccountIsAlreadyPermanentlyRegistered(
-                account_key,
-            ));
+            return Err(PMRegisterAccountError::AccountIsAlreadyPermanentlyRegistered(account_key));
         }
 
         self.delta
@@ -461,15 +459,15 @@ impl PrivilegesManager {
         contract_body: PrivilegesManagerContractBody,
     ) -> Result<(), PMRegisterContractError> {
         if self.is_contract_ephemerally_registered(contract_id) {
-            return Err(PMRegisterContractError::ContractHasJustBeenEphemerallyRegistered(
-                contract_id,
-            ));
+            return Err(
+                PMRegisterContractError::ContractHasJustBeenEphemerallyRegistered(contract_id),
+            );
         }
 
         if self.is_contract_permanently_registered(contract_id) {
-            return Err(PMRegisterContractError::ContractIsAlreadyPermanentlyRegistered(
-                contract_id,
-            ));
+            return Err(
+                PMRegisterContractError::ContractIsAlreadyPermanentlyRegistered(contract_id),
+            );
         }
 
         self.delta
@@ -509,7 +507,11 @@ impl PrivilegesManager {
 
     /// Returns account txfee exemptions.
     pub fn get_account_txfee_exemptions(&self, account_key: AccountKey) -> Option<Exemption> {
-        if let Some(value) = self.delta.updated_account_txfee_exemptions.get(&account_key) {
+        if let Some(value) = self
+            .delta
+            .updated_account_txfee_exemptions
+            .get(&account_key)
+        {
             return Some(value.clone());
         }
 
@@ -897,7 +899,10 @@ impl PrivilegesManager {
         for (account_key, liveness_flag) in self.delta.updated_account_liveness_flags.iter() {
             {
                 let tree = self.on_disk_accounts.open_tree(account_key)?;
-                tree.insert(ACCOUNT_LIVENESS_FLAG_SPECIAL_DB_KEY, liveness_flag.to_bytes())?;
+                tree.insert(
+                    ACCOUNT_LIVENESS_FLAG_SPECIAL_DB_KEY,
+                    liveness_flag.to_bytes(),
+                )?;
             }
 
             if let Some(account_body) = self.in_memory_accounts.get_mut(account_key) {
@@ -909,7 +914,10 @@ impl PrivilegesManager {
         for (account_key, hierarchy) in self.delta.updated_account_hierarchies.iter() {
             {
                 let tree = self.on_disk_accounts.open_tree(account_key)?;
-                tree.insert(ACCOUNT_HIERARCHY_SPECIAL_DB_KEY, [hierarchy.to_bytecode()].as_slice())?;
+                tree.insert(
+                    ACCOUNT_HIERARCHY_SPECIAL_DB_KEY,
+                    [hierarchy.to_bytecode()].as_slice(),
+                )?;
             }
 
             if let Some(account_body) = self.in_memory_accounts.get_mut(account_key) {
@@ -980,7 +988,8 @@ impl PrivilegesManager {
         }
 
         // 9 Save updated account can-deploy-contract switches.
-        for (account_key, can_deploy_contract) in self.delta.updated_account_can_deploy_contract.iter()
+        for (account_key, can_deploy_contract) in
+            self.delta.updated_account_can_deploy_contract.iter()
         {
             {
                 let tree = self.on_disk_accounts.open_tree(account_key)?;
@@ -999,7 +1008,10 @@ impl PrivilegesManager {
         for (contract_id, liveness_flag) in self.delta.updated_contract_liveness_flags.iter() {
             {
                 let tree = self.on_disk_contracts.open_tree(contract_id)?;
-                tree.insert(CONTRACT_LIVENESS_FLAG_SPECIAL_DB_KEY, liveness_flag.to_bytes())?;
+                tree.insert(
+                    CONTRACT_LIVENESS_FLAG_SPECIAL_DB_KEY,
+                    liveness_flag.to_bytes(),
+                )?;
             }
 
             if let Some(contract_body) = self.in_memory_contracts.get_mut(contract_id) {
@@ -1012,7 +1024,10 @@ impl PrivilegesManager {
             {
                 let tree = self.on_disk_contracts.open_tree(contract_id)?;
                 let immutability_byte = if *immutability { 1u8 } else { 0u8 };
-                tree.insert(CONTRACT_IMMUTABILITY_SPECIAL_DB_KEY, [immutability_byte].as_slice())?;
+                tree.insert(
+                    CONTRACT_IMMUTABILITY_SPECIAL_DB_KEY,
+                    [immutability_byte].as_slice(),
+                )?;
             }
 
             if let Some(contract_body) = self.in_memory_contracts.get_mut(contract_id) {
@@ -1024,7 +1039,10 @@ impl PrivilegesManager {
         for (contract_id, tax_exemptions) in self.delta.updated_contract_tax_exemptions.iter() {
             {
                 let tree = self.on_disk_contracts.open_tree(contract_id)?;
-                tree.insert(CONTRACT_TAX_EXEMPTIONS_SPECIAL_DB_KEY, tax_exemptions.to_bytes())?;
+                tree.insert(
+                    CONTRACT_TAX_EXEMPTIONS_SPECIAL_DB_KEY,
+                    tax_exemptions.to_bytes(),
+                )?;
             }
 
             if let Some(contract_body) = self.in_memory_contracts.get_mut(contract_id) {

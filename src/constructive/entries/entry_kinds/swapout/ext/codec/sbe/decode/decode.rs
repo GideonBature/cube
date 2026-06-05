@@ -8,9 +8,11 @@ impl Swapout {
     /// Decodes a `Swapout` from Structural Byte-scope Encoding (SBE) bytes.
     pub fn decode_sbe(bytes: &[u8]) -> Result<Self, SwapoutSBEDecodeError> {
         if bytes.is_empty() {
-            return Err(SwapoutSBEDecodeError::SwapoutSBEInsufficientBytesForRootAccountLengthPrefix {
-                got_total: 0,
-            });
+            return Err(
+                SwapoutSBEDecodeError::SwapoutSBEInsufficientBytesForRootAccountLengthPrefix {
+                    got_total: 0,
+                },
+            );
         }
         if bytes[0] != 0x05 {
             return Err(SwapoutSBEDecodeError::InvalidEntryKindByteError {
@@ -19,9 +21,11 @@ impl Swapout {
             });
         }
         if bytes.len() < 5 {
-            return Err(SwapoutSBEDecodeError::SwapoutSBEInsufficientBytesForRootAccountLengthPrefix {
-                got_total: bytes.len(),
-            });
+            return Err(
+                SwapoutSBEDecodeError::SwapoutSBEInsufficientBytesForRootAccountLengthPrefix {
+                    got_total: bytes.len(),
+                },
+            );
         }
 
         let root_len_u32 = u32::from_le_bytes(bytes[1..5].try_into().map_err(|_| {
@@ -30,10 +34,12 @@ impl Swapout {
         let root_len = root_len_u32 as usize;
         let after_root_prefix = &bytes[5..];
         if after_root_prefix.len() < root_len {
-            return Err(SwapoutSBEDecodeError::SwapoutSBERootAccountLengthPrefixExceedsPayload {
-                root_len,
-                got_after_prefix: after_root_prefix.len(),
-            });
+            return Err(
+                SwapoutSBEDecodeError::SwapoutSBERootAccountLengthPrefixExceedsPayload {
+                    root_len,
+                    got_after_prefix: after_root_prefix.len(),
+                },
+            );
         }
 
         let (root_slice, after_root) = after_root_prefix.split_at(root_len);
@@ -41,9 +47,11 @@ impl Swapout {
             .map_err(|_| SwapoutSBEDecodeError::SwapoutSBERootAccountDecodeError)?;
 
         if after_root.len() < 12 {
-            return Err(SwapoutSBEDecodeError::SwapoutSBEInsufficientBytesForTargetAndAmount {
-                got_total: bytes.len(),
-            });
+            return Err(
+                SwapoutSBEDecodeError::SwapoutSBEInsufficientBytesForTargetAndAmount {
+                    got_total: bytes.len(),
+                },
+            );
         }
 
         // Matches `encode_sbe`: LE `amount` (4) then `target` SBE (8).
@@ -60,9 +68,11 @@ impl Swapout {
 
         let pinless_slice = &after_root[12..];
         if pinless_slice.is_empty() {
-            return Err(SwapoutSBEDecodeError::SwapoutSBEInsufficientBytesForPinlessSelfKind {
-                got_total: bytes.len(),
-            });
+            return Err(
+                SwapoutSBEDecodeError::SwapoutSBEInsufficientBytesForPinlessSelfKind {
+                    got_total: bytes.len(),
+                },
+            );
         }
 
         let pinless_kind = pinless_slice[0];
@@ -81,7 +91,11 @@ impl Swapout {
                 let custom_scriptpubkey = pinless_slice[1..].to_vec();
                 PinlessSelf::new_unknown(custom_scriptpubkey, None)
             }
-            b => return Err(SwapoutSBEDecodeError::SwapoutSBEInvalidPinlessSelfKindByte(b)),
+            b => {
+                return Err(SwapoutSBEDecodeError::SwapoutSBEInvalidPinlessSelfKindByte(
+                    b,
+                ))
+            }
         };
 
         Ok(Swapout::new(root_account, amount, target, pinless_self))

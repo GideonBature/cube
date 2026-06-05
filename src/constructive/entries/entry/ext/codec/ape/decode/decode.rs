@@ -165,7 +165,7 @@ impl Entry {
                                         .await
                                         .map_err(EntryAPEDecodeError::SwapoutEntryAPEDecodeError)?;
                                         Entry::Swapout(swapout_entry)
-                                    },
+                                    }
                                 }
                             }
 
@@ -181,9 +181,9 @@ impl Entry {
                                     // 2.b.2.b.1.b.1.a The `Entry` is in the `Outer Lowermost Branch`.
                                     false => {
                                         // 2.b.2.b.1.b.1.a.1 Collect one bit to determine if the `Entry` is a `Deploy` or a `Config`.
-                                        let deploy_or_config_bit = bit_stream
-                                            .next()
-                                            .ok_or(EntryAPEDecodeError::DeployOrConfigBitCollectError)?;
+                                        let deploy_or_config_bit = bit_stream.next().ok_or(
+                                            EntryAPEDecodeError::DeployOrConfigBitCollectError,
+                                        )?;
 
                                         // 2.b.2.b.1.b.1.a.2 Match on whether the `Entry` is a `Deploy` or a `Config`.
                                         match deploy_or_config_bit {
@@ -237,7 +237,8 @@ impl Entry {
         let collected_bits = match (decode_start_stream, decode_start_remaining) {
             (Some(mut start_stream), Some(start_remaining)) => {
                 let consumed_bits_len = start_remaining.saturating_sub(bit_stream.len());
-                let consumed_bits: bit_vec::BitVec = start_stream.by_ref().take(consumed_bits_len).collect();
+                let consumed_bits: bit_vec::BitVec =
+                    start_stream.by_ref().take(consumed_bits_len).collect();
                 Some(consumed_bits)
             }
             _ => None,

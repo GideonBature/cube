@@ -725,10 +725,7 @@ impl Registry {
     }
 
     /// Returns the number of methods on a contract's executable.
-    pub fn get_contract_methods_len_by_contract_id(
-        &self,
-        contract_id: [u8; 32],
-    ) -> Option<usize> {
+    pub fn get_contract_methods_len_by_contract_id(&self, contract_id: [u8; 32]) -> Option<usize> {
         self.get_contract_body_by_contract_id(contract_id)
             .map(|body| body.executable.methods_len())
     }

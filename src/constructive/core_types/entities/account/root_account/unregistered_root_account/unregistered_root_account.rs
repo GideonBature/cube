@@ -1,9 +1,9 @@
 use crate::constructive::entity::account::root_account::root_account::verify_bls_key_authorization_signature;
+use crate::inscriptive::flame_manager::flame_config::flame_config::FMAccountFlameConfig;
 use crate::transmutative::bls::bls_ser::{
     deserialize_bls_key, deserialize_schnorr_signature, serialize_bls_key,
     serialize_schnorr_signature,
 };
-use crate::inscriptive::flame_manager::flame_config::flame_config::FMAccountFlameConfig;
 use crate::transmutative::secp::schnorr::Bytes32;
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};

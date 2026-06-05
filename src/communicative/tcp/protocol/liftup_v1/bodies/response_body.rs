@@ -103,12 +103,7 @@ impl LiftupV1ResponseBody {
         }
     }
 
-    pub fn ok(
-        entry_id: [u8; 32],
-        batch_height: u64,
-        batch_timestamp: u64,
-        entry: Entry,
-    ) -> Self {
+    pub fn ok(entry_id: [u8; 32], batch_height: u64, batch_timestamp: u64, entry: Entry) -> Self {
         Self::Ok(LiftupV1SuccessBody {
             entry_id,
             batch_height,

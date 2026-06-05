@@ -1,6 +1,4 @@
-use crate::constructive::core_types::valtypes::val::long_val::long_val::{
-    LongVal, LongValTier,
-};
+use crate::constructive::core_types::valtypes::val::long_val::long_val::{LongVal, LongValTier};
 use bit_vec::BitVec;
 
 /// Airly Payload Encoding (APE) encoding for `LongVal`.

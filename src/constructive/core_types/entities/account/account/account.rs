@@ -18,10 +18,7 @@ pub enum Account {
 
 impl Account {
     /// Returns the `Account` for the given account key from the `Registry`.
-    pub async fn account_from_registry(
-        account_key: [u8; 32],
-        registry: &REGISTRY,
-    ) -> Account {
+    pub async fn account_from_registry(account_key: [u8; 32], registry: &REGISTRY) -> Account {
         // 1 Retrieve the account info if it is registered.
         let account_info = {
             // 1.1 Lock the registry.
@@ -104,10 +101,15 @@ impl Account {
 
             // 2.b The `Account` is unregistered.
             Self::UnregisteredAccount(unregistered_account) => {
-                obj.insert("kind".to_string(), Value::String("unregistered".to_string()));
+                obj.insert(
+                    "kind".to_string(),
+                    Value::String("unregistered".to_string()),
+                );
                 obj.insert(
                     "account_key_to_be_registered".to_string(),
-                    Value::String(hex::encode(unregistered_account.account_key_to_be_registered)),
+                    Value::String(hex::encode(
+                        unregistered_account.account_key_to_be_registered,
+                    )),
                 );
             }
         }

@@ -4,7 +4,8 @@ use crate::executive::{
         compiler::compiler::ProgramCompiler,
         executable::Program,
         method::{
-            compiler::compiler::MethodCompiler, method_type::MethodType, program_method::ProgramMethod,
+            compiler::compiler::MethodCompiler, method_type::MethodType,
+            program_method::ProgramMethod,
         },
     },
     opcode::{compiler::compiler::OpcodeCompiler, opcode::Opcode},
@@ -171,7 +172,10 @@ fn parse_comp_program_arguments<'a>(
         }
 
         // Validate all method hex blobs up front for better argument disambiguation.
-        if method_bytes_args.iter().any(|m| parse_hex_bytes(m).is_none()) {
+        if method_bytes_args
+            .iter()
+            .any(|m| parse_hex_bytes(m).is_none())
+        {
             continue;
         }
 

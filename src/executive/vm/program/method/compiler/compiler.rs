@@ -3,8 +3,8 @@ use crate::{
     executive::{
         executable::method::{
             compiler::compiler_error::{MethodCompileError, MethodDecompileError},
-            program_method::ProgramMethod,
             method_type::MethodType,
+            program_method::ProgramMethod,
         },
         opcode::{compiler::compiler::OpcodeCompiler, opcode::Opcode},
     },

@@ -31,7 +31,10 @@ impl Swapout {
 
     pub fn json(&self) -> Value {
         let mut obj = Map::new();
-        obj.insert("entry_kind".to_string(), Value::String("swapout".to_string()));
+        obj.insert(
+            "entry_kind".to_string(),
+            Value::String("swapout".to_string()),
+        );
         obj.insert("account".to_string(), self.root_account.json());
         obj.insert("amount".to_string(), Value::Number(self.amount.into()));
         obj.insert(

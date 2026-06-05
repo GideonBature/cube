@@ -32,7 +32,9 @@ impl Liftup {
         // 3 Encode the `Target`.
         {
             // 3.1 Encode the `Target`.
-            let target_bits = self.target.encode_ape(execution_batch_height)
+            let target_bits = self
+                .target
+                .encode_ape(execution_batch_height)
                 .map_err(|e| LiftupAPEEncodeError::TargetAPEEncodeError(e))?;
 
             // 3.2 Extend the bit vector with the `Target` bit vector.

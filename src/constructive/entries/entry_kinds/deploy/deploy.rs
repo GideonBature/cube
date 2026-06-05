@@ -19,7 +19,12 @@ pub struct Deploy {
 
 impl Deploy {
     /// Creates a new `Deploy` entry kind.
-    pub fn new(root_account: RootAccount, program: Program, initial_balance: u32, target: Target) -> Self {
+    pub fn new(
+        root_account: RootAccount,
+        program: Program,
+        initial_balance: u32,
+        target: Target,
+    ) -> Self {
         Self {
             root_account,
             program,
@@ -31,7 +36,10 @@ impl Deploy {
     /// Returns the deploy entry as a JSON object.
     pub fn json(&self) -> Value {
         let mut obj = Map::new();
-        obj.insert("entry_kind".to_string(), Value::String("deploy".to_string()));
+        obj.insert(
+            "entry_kind".to_string(),
+            Value::String("deploy".to_string()),
+        );
         obj.insert("root_account".to_string(), self.root_account.json());
         obj.insert("program".to_string(), self.program.json());
         obj.insert(

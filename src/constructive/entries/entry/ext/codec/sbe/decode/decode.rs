@@ -23,15 +23,15 @@ impl Entry {
         match entry_kind_byte {
             // 3.a `Move` (`0x00`): decode from the full buffer (`Move::decode_sbe` consumes the tag).
             0x00 => {
-                let move_entry = Move::decode_sbe(bytes)
-                    .map_err(EntrySBEDecodeError::MoveSBEDecodeError)?;
+                let move_entry =
+                    Move::decode_sbe(bytes).map_err(EntrySBEDecodeError::MoveSBEDecodeError)?;
 
                 Ok(Entry::Move(move_entry))
             }
 
             0x01 => {
-                let call = Call::decode_sbe(bytes)
-                    .map_err(EntrySBEDecodeError::CallSBEDecodeError)?;
+                let call =
+                    Call::decode_sbe(bytes).map_err(EntrySBEDecodeError::CallSBEDecodeError)?;
                 Ok(Entry::Call(call))
             }
 
@@ -48,13 +48,13 @@ impl Entry {
                 Ok(Entry::Swapout(swapout))
             }
             0x06 => {
-                let deploy = Deploy::decode_sbe(bytes)
-                    .map_err(EntrySBEDecodeError::DeploySBEDecodeError)?;
+                let deploy =
+                    Deploy::decode_sbe(bytes).map_err(EntrySBEDecodeError::DeploySBEDecodeError)?;
                 Ok(Entry::Deploy(deploy))
             }
             0x07 => {
-                let config = Config::decode_sbe(bytes)
-                    .map_err(EntrySBEDecodeError::ConfigSBEDecodeError)?;
+                let config =
+                    Config::decode_sbe(bytes).map_err(EntrySBEDecodeError::ConfigSBEDecodeError)?;
                 Ok(Entry::Config(config))
             }
 

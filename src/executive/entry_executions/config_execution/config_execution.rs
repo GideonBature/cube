@@ -27,7 +27,11 @@ impl ExecCtx {
             .as_ref()
             .map(|v| v.len() as u64)
             .unwrap_or(0)
-            + if config.projector_config.is_some() { 32 } else { 0 }
+            + if config.projector_config.is_some() {
+                32
+            } else {
+                0
+            }
             + config
                 .flame_config
                 .as_ref()
@@ -102,7 +106,7 @@ impl ExecCtx {
         let fee_debit = 0u64
             .checked_add(fees_after_subsidy)
             .ok_or(ConfigExecutionError::ConfigFeeDebitOverflow)?;
-        
+
         decrease_account_balance_with_coin_manager(&self.coin_manager, account_key, fee_debit)
             .await
             .map_err(ConfigExecutionError::CoinManagerAccountBalanceDownError)?;

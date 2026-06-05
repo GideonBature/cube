@@ -33,7 +33,10 @@ impl PinlessSelfUnknown {
                 Some((outpoint, txout)) => {
                     let mut o = Map::new();
                     let mut outpoint_json = Map::new();
-                    outpoint_json.insert("txid".to_string(), Value::String(hex::encode(outpoint.txid)));
+                    outpoint_json.insert(
+                        "txid".to_string(),
+                        Value::String(hex::encode(outpoint.txid)),
+                    );
                     outpoint_json.insert("vout".to_string(), Value::Number(outpoint.vout.into()));
                     o.insert("outpoint".to_string(), Value::Object(outpoint_json));
 

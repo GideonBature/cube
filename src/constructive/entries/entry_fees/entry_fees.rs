@@ -84,9 +84,15 @@ impl EntryFees {
                 total_pre_subsidy,
                 subsidy_breakdown,
             } => {
-                obj.insert("entry_kind".to_string(), Value::String("liftup".to_string()));
+                obj.insert(
+                    "entry_kind".to_string(),
+                    Value::String("liftup".to_string()),
+                );
                 obj.insert("base_fee".to_string(), Value::Number((*base_fee).into()));
-                obj.insert("per_lift_fee".to_string(), Value::Number((*per_lift_fee).into()));
+                obj.insert(
+                    "per_lift_fee".to_string(),
+                    Value::Number((*per_lift_fee).into()),
+                );
                 obj.insert(
                     "total_pre_subsidy".to_string(),
                     Value::Number((*total_pre_subsidy).into()),
@@ -110,17 +116,17 @@ impl EntryFees {
                     "total_pre_subsidy".to_string(),
                     Value::Number((*total_pre_subsidy).into()),
                 );
-                obj.insert(
-                    "subsidy_breakdown".to_string(),
-                    subsidy_breakdown.json(),
-                );
+                obj.insert("subsidy_breakdown".to_string(), subsidy_breakdown.json());
             }
             EntryFees::Swapout {
                 base_fee,
                 total_pre_subsidy,
                 subsidy_breakdown,
             } => {
-                obj.insert("entry_kind".to_string(), Value::String("swapout".to_string()));
+                obj.insert(
+                    "entry_kind".to_string(),
+                    Value::String("swapout".to_string()),
+                );
                 obj.insert("base_fee".to_string(), Value::Number((*base_fee).into()));
                 obj.insert(
                     "total_pre_subsidy".to_string(),
@@ -142,7 +148,10 @@ impl EntryFees {
                 projector_config_updated,
                 flame_config_updated,
             } => {
-                obj.insert("entry_kind".to_string(), Value::String("config".to_string()));
+                obj.insert(
+                    "entry_kind".to_string(),
+                    Value::String("config".to_string()),
+                );
                 obj.insert("base_fee".to_string(), Value::Number((*base_fee).into()));
                 obj.insert(
                     "total_pre_subsidy".to_string(),
@@ -176,7 +185,10 @@ impl EntryFees {
                 program_bytes_len,
                 contract_id,
             } => {
-                obj.insert("entry_kind".to_string(), Value::String("deploy".to_string()));
+                obj.insert(
+                    "entry_kind".to_string(),
+                    Value::String("deploy".to_string()),
+                );
                 obj.insert("base_fee".to_string(), Value::Number((*base_fee).into()));
                 obj.insert(
                     "total_pre_subsidy".to_string(),

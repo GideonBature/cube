@@ -85,8 +85,10 @@ impl ProgramCompiler for Program {
                     .try_into()
                     .map_err(|_| ProgramDecompileError::MetadataLengthBytesCollectError)?;
                 let metadata_len = u16::from_le_bytes(metadata_len_bytes) as usize;
-                let metadata_bytes: Vec<u8> =
-                    bytecode_stream.by_ref().take(metadata_len).collect::<Vec<u8>>();
+                let metadata_bytes: Vec<u8> = bytecode_stream
+                    .by_ref()
+                    .take(metadata_len)
+                    .collect::<Vec<u8>>();
                 if metadata_bytes.len() != metadata_len {
                     return Err(ProgramDecompileError::MetadataBytesCollectError);
                 }

@@ -1,5 +1,5 @@
-use crate::constructive::entry::entry::ext::codec::ape::encode::error::encode_error::EntryAPEEncodeError;
 use crate::constructive::entry::entry::entry::Entry;
+use crate::constructive::entry::entry::ext::codec::ape::encode::error::encode_error::EntryAPEEncodeError;
 use crate::inscriptive::registry::registry::REGISTRY;
 use bit_vec::BitVec;
 

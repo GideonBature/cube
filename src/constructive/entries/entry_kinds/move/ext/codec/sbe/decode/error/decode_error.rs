@@ -5,18 +5,37 @@ use crate::constructive::entity::account::root_account::ext::codec::sbe::decode:
 /// Errors that can occur when decoding a `Move` from Structural Byte-scope Encoding (SBE) bytes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum MoveSBEDecodeError {
-    InvalidEntryKindByteError { expected: u8, got: u8 },
-    MoveSBEInsufficientBytesForFromLengthPrefix { got_total: usize },
+    InvalidEntryKindByteError {
+        expected: u8,
+        got: u8,
+    },
+    MoveSBEInsufficientBytesForFromLengthPrefix {
+        got_total: usize,
+    },
     MoveSBEFromLengthPrefixBytesConversionError,
-    MoveSBEFromLengthPrefixExceedsPayload { from_len: usize, got_after_prefix: usize },
+    MoveSBEFromLengthPrefixExceedsPayload {
+        from_len: usize,
+        got_after_prefix: usize,
+    },
     MoveSBEFromRootAccount(RootAccountSBEDecodeError),
-    MoveSBEInsufficientBytesForToLengthPrefix { got_total: usize },
+    MoveSBEInsufficientBytesForToLengthPrefix {
+        got_total: usize,
+    },
     MoveSBEToLengthPrefixBytesConversionError,
-    MoveSBEToLengthPrefixExceedsPayload { to_len: usize, got_after_prefix: usize },
+    MoveSBEToLengthPrefixExceedsPayload {
+        to_len: usize,
+        got_after_prefix: usize,
+    },
     MoveSBEToAccount(AccountSBEDecodeError),
-    MoveSBEInsufficientBytesForAmount { got_total: usize },
+    MoveSBEInsufficientBytesForAmount {
+        got_total: usize,
+    },
     MoveSBEAmountBytesConversionError,
-    MoveSBEInsufficientBytesForTarget { got_total: usize },
+    MoveSBEInsufficientBytesForTarget {
+        got_total: usize,
+    },
     MoveSBETarget(TargetSBEDecodeError),
-    MoveSBETrailingBytesAfterMove { trailing: usize },
+    MoveSBETrailingBytesAfterMove {
+        trailing: usize,
+    },
 }

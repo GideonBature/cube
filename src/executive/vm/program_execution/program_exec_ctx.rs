@@ -1,13 +1,12 @@
 use crate::{
     constructive::entry::entry_kinds::call::call::Call,
     executive::{
-        vm::program_execution::{caller::Caller, exec::execute, exec_error::ExecutionError},
         stack::stack_item::StackItem,
+        vm::program_execution::{caller::Caller, exec::execute, exec_error::ExecutionError},
     },
     inscriptive::{
         coin_manager::coin_manager::COIN_MANAGER, params_manager::params_manager::PARAMS_MANAGER,
-        registry::registry::REGISTRY,
-        state_manager::state_manager::STATE_MANAGER,
+        registry::registry::REGISTRY, state_manager::state_manager::STATE_MANAGER,
     },
 };
 use std::sync::Arc;

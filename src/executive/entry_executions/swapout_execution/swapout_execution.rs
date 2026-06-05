@@ -99,7 +99,7 @@ impl ExecCtx {
                     fees_pre_subsidy,
                     latest_activity_timestamp,
                 )
-                    .await?
+                .await?
             }
             RootAccount::RegisteredAndConfiguredRootAccount(
                 registered_and_configured_root_account,
@@ -117,7 +117,7 @@ impl ExecCtx {
                     fees_pre_subsidy,
                     latest_activity_timestamp,
                 )
-                    .await?
+                .await?
             }
         };
 

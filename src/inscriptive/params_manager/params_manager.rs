@@ -216,7 +216,8 @@ impl ParamsManager {
     }
 
     pub fn set_swapout_entry_base_fee(&mut self, value: u64) {
-        self.get_mut_ephemeral_params_holder().swapout_entry_base_fee = value;
+        self.get_mut_ephemeral_params_holder()
+            .swapout_entry_base_fee = value;
     }
 
     pub fn set_config_entry_base_fee(&mut self, value: u64) {

@@ -42,7 +42,8 @@ pub type ARCHIVAL_MANAGER = Arc<Mutex<ArchivalManager>>;
 fn entry_involves_account(entry: &Entry, account_key: [u8; 32]) -> bool {
     match entry {
         Entry::Move(move_entry) => {
-            move_entry.from.account_key() == account_key || move_entry.to.account_key() == account_key
+            move_entry.from.account_key() == account_key
+                || move_entry.to.account_key() == account_key
         }
         Entry::Call(call) => call.account.account_key() == account_key,
         Entry::Liftup(liftup) => liftup.root_account.account_key() == account_key,
@@ -183,22 +184,20 @@ impl ArchivalManager {
         &self,
         prev_payload_outpoint: &OutPoint,
     ) -> Option<BatchContainer> {
-        self.in_memory_records
-            .values()
-            .find_map(|record| {
-                record
-                    .batch_container
-                    .signed_batch_txn
-                    .tx_inputs
-                    .first()
-                    .and_then(|(outpoint, _, _)| {
-                        if outpoint.txid == prev_payload_outpoint.txid {
-                            Some(record.batch_container.clone())
-                        } else {
-                            None
-                        }
-                    })
-            })
+        self.in_memory_records.values().find_map(|record| {
+            record
+                .batch_container
+                .signed_batch_txn
+                .tx_inputs
+                .first()
+                .and_then(|(outpoint, _, _)| {
+                    if outpoint.txid == prev_payload_outpoint.txid {
+                        Some(record.batch_container.clone())
+                    } else {
+                        None
+                    }
+                })
+        })
     }
 
     /// JSON for a full batch record (`BatchRecord::json`), resolved by batch txid.
@@ -264,8 +263,7 @@ impl ArchivalManager {
             entry,
             collected_bits,
             fees,
-        ) =
-            self.entry_record_by_entry_id(entry_id)?;
+        ) = self.entry_record_by_entry_id(entry_id)?;
 
         // 2 Build the JSON object for the Entry record.
         let mut obj = Map::new();

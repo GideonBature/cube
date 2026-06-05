@@ -9,10 +9,7 @@ impl OpsPrice {
     /// When `ops_price_ppm` equals `base_ops_price`, a single `true` bit is written.
     /// Otherwise a `false` bit is written followed by the overhead (`ops_price_ppm - base_ops_price`)
     /// as a [`LongVal`]. Encoding fails if `ops_price_ppm` is less than `base_ops_price`.
-    pub fn encode_ape(
-        &self,
-        base_ops_price: u32,
-    ) -> Result<BitVec, OpsPriceAPEEncodeError> {
+    pub fn encode_ape(&self, base_ops_price: u32) -> Result<BitVec, OpsPriceAPEEncodeError> {
         let base_ops_price = u64::from(base_ops_price);
 
         if self.ops_price_ppm < base_ops_price {

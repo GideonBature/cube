@@ -1,6 +1,6 @@
 use crate::communicative::rpc::bitcoin_rpc::bitcoin_rpc_error::{
-    BitcoinRPCBroadcastRawTransactionError, BitcoinRPCGetChainTipError, BitcoinRPCRetrieveBlockError,
-    BitcoinRPCGetMempoolFeeRateError, BitcoinRPCValidateRPCError,
+    BitcoinRPCBroadcastRawTransactionError, BitcoinRPCGetChainTipError,
+    BitcoinRPCGetMempoolFeeRateError, BitcoinRPCRetrieveBlockError, BitcoinRPCValidateRPCError,
 };
 use crate::communicative::rpc::bitcoin_rpc::bitcoin_rpc_holder::BitcoinRPCHolder;
 use crate::operative::run_args::chain::Chain;

@@ -9,10 +9,7 @@ impl Target {
     /// When `execution_batch_height` equals `targeted_at_batch_height`, a single `false` bit
     /// indicates full overlap. Otherwise a `true` bit and two further bits encode the batch gap
     /// between execution and target heights in the range 1..=4 (`00`..=`11` map to gaps 1..=4).
-    pub fn encode_ape(
-        &self,
-        execution_batch_height: u64,
-    ) -> Result<BitVec, TargetAPEEncodeError> {
+    pub fn encode_ape(&self, execution_batch_height: u64) -> Result<BitVec, TargetAPEEncodeError> {
         // 1 Get `targeted_at_batch_height` from `self`.
         let targeted = self.targeted_at_batch_height;
 

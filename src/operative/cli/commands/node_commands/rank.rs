@@ -11,8 +11,7 @@ pub async fn account_rank_command(registry: &REGISTRY, account_key: [u8; 32]) {
         Some(rank) => println!("{}", rank),
         None => eprintln!(
             "{}",
-            "No rank for this account key in the registry (not registered on disk)."
-                .yellow()
+            "No rank for this account key in the registry (not registered on disk).".yellow()
         ),
     }
 }
@@ -27,8 +26,7 @@ pub async fn contract_rank_command(registry: &REGISTRY, contract_id: [u8; 32]) {
         Some(rank) => println!("{}", rank),
         None => eprintln!(
             "{}",
-            "No rank for this contract id in the registry (not registered on disk)."
-                .yellow()
+            "No rank for this contract id in the registry (not registered on disk).".yellow()
         ),
     }
 }

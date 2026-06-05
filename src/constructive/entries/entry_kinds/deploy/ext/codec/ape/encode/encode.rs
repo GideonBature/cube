@@ -26,8 +26,8 @@ impl Deploy {
             .program
             .compile()
             .map_err(|_| DeployAPEEncodeError::ProgramCompileError)?;
-        let program_len =
-            u32::try_from(program_bytes.len()).map_err(|_| DeployAPEEncodeError::ProgramLenTooLarge(program_bytes.len()))?;
+        let program_len = u32::try_from(program_bytes.len())
+            .map_err(|_| DeployAPEEncodeError::ProgramLenTooLarge(program_bytes.len()))?;
         bits.extend(ShortVal::new(program_len).encode_ape());
         bits.extend(BitVec::from_bytes(&program_bytes));
 

@@ -77,22 +77,34 @@ mod stack_uint_tests {
 
         // Test 1_000_000
         let stack_item: StackItem = StackItem::from_stack_uint(StackUint::from(1000000));
-        assert_eq!(stack_item.to_stack_uint().unwrap(), StackUint::from(1000000));
+        assert_eq!(
+            stack_item.to_stack_uint().unwrap(),
+            StackUint::from(1000000)
+        );
         assert_eq!(stack_item.bytes().len(), 3);
 
         // Test 16777215
         let stack_item: StackItem = StackItem::from_stack_uint(StackUint::from(16777215));
-        assert_eq!(stack_item.to_stack_uint().unwrap(), StackUint::from(16777215));
+        assert_eq!(
+            stack_item.to_stack_uint().unwrap(),
+            StackUint::from(16777215)
+        );
         assert_eq!(stack_item.bytes().len(), 3);
 
         // Test 16777216 (now we are in the 4-byte range)
         let stack_item: StackItem = StackItem::from_stack_uint(StackUint::from(16777216));
-        assert_eq!(stack_item.to_stack_uint().unwrap(), StackUint::from(16777216));
+        assert_eq!(
+            stack_item.to_stack_uint().unwrap(),
+            StackUint::from(16777216)
+        );
         assert_eq!(stack_item.bytes().len(), 4);
 
         // Test 1_000_000_000
         let stack_item: StackItem = StackItem::from_stack_uint(StackUint::from(1000000000));
-        assert_eq!(stack_item.to_stack_uint().unwrap(), StackUint::from(1000000000));
+        assert_eq!(
+            stack_item.to_stack_uint().unwrap(),
+            StackUint::from(1000000000)
+        );
         assert_eq!(stack_item.bytes().len(), 4);
 
         // Test 4,294,967,295
@@ -136,7 +148,8 @@ mod stack_uint_tests {
         assert_eq!(stack_item.bytes().len(), 6);
 
         // Test 281474976710655
-        let stack_item: StackItem = StackItem::from_stack_uint(StackUint::from(281474976710655_i64));
+        let stack_item: StackItem =
+            StackItem::from_stack_uint(StackUint::from(281474976710655_i64));
         assert_eq!(
             stack_item.to_stack_uint().unwrap(),
             StackUint::from(281474976710655_i64)
@@ -144,7 +157,8 @@ mod stack_uint_tests {
         assert_eq!(stack_item.bytes().len(), 6);
 
         // Test 281474976710656 (now we are in the 7-byte range)
-        let stack_item: StackItem = StackItem::from_stack_uint(StackUint::from(281474976710656_i64));
+        let stack_item: StackItem =
+            StackItem::from_stack_uint(StackUint::from(281474976710656_i64));
         assert_eq!(
             stack_item.to_stack_uint().unwrap(),
             StackUint::from(281474976710656_i64)
@@ -152,7 +166,8 @@ mod stack_uint_tests {
         assert_eq!(stack_item.bytes().len(), 7);
 
         // Test 72057594037927935
-        let stack_item: StackItem = StackItem::from_stack_uint(StackUint::from(72057594037927935_i64));
+        let stack_item: StackItem =
+            StackItem::from_stack_uint(StackUint::from(72057594037927935_i64));
         assert_eq!(
             stack_item.to_stack_uint().unwrap(),
             StackUint::from(72057594037927935_i64)
@@ -160,7 +175,8 @@ mod stack_uint_tests {
         assert_eq!(stack_item.bytes().len(), 7);
 
         // Test 72057594037927936 (now we are in the 8-byte range)
-        let stack_item: StackItem = StackItem::from_stack_uint(StackUint::from(72057594037927936_i64));
+        let stack_item: StackItem =
+            StackItem::from_stack_uint(StackUint::from(72057594037927936_i64));
         assert_eq!(
             stack_item.to_stack_uint().unwrap(),
             StackUint::from(72057594037927936_i64)
@@ -168,7 +184,8 @@ mod stack_uint_tests {
         assert_eq!(stack_item.bytes().len(), 8);
 
         // Test 18446744073709551615
-        let stack_item: StackItem = StackItem::from_stack_uint(StackUint::from(18446744073709551615_u64));
+        let stack_item: StackItem =
+            StackItem::from_stack_uint(StackUint::from(18446744073709551615_u64));
         assert_eq!(
             stack_item.to_stack_uint().unwrap(),
             StackUint::from(18446744073709551615_u64)

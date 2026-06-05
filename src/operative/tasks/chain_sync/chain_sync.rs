@@ -10,10 +10,8 @@ use crate::{
     inscriptive::{
         archival_manager::archival_manager::ARCHIVAL_MANAGER, baked,
         coin_manager::coin_manager::COIN_MANAGER, flame_manager::flame_manager::FLAME_MANAGER,
-        graveyard::graveyard::GRAVEYARD,
-        params_manager::params_manager::PARAMS_MANAGER,
-        privileges_manager::privileges_manager::PRIVILEGES_MANAGER,
-        registry::registry::REGISTRY,
+        graveyard::graveyard::GRAVEYARD, params_manager::params_manager::PARAMS_MANAGER,
+        privileges_manager::privileges_manager::PRIVILEGES_MANAGER, registry::registry::REGISTRY,
         state_manager::state_manager::STATE_MANAGER, sync_manager::sync_manager::SYNC_MANAGER,
         utxo_set::utxo_set::UTXO_SET,
     },

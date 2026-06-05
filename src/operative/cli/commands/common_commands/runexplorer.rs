@@ -76,7 +76,10 @@ pub async fn runexplorer_command(
         .route("/entry/:entry_id", get(page_entry_by_id))
         .route("/account/:account_id/:section", get(page_account_section))
         .route("/account/:account_id", get(page_account_root_redirect))
-        .route("/contract/:contract_id/:section", get(page_contract_section))
+        .route(
+            "/contract/:contract_id/:section",
+            get(page_contract_section),
+        )
         .route("/contract/:contract_id", get(page_contract_root_redirect))
         .with_state(state);
 
@@ -96,7 +99,11 @@ pub async fn runexplorer_command(
                     .yellow()
                 );
             } else {
-                eprintln!("{} {}", format!("runexplorer: failed to bind {}:", addr).yellow(), e);
+                eprintln!(
+                    "{} {}",
+                    format!("runexplorer: failed to bind {}:", addr).yellow(),
+                    e
+                );
             }
             return;
         }
@@ -773,8 +780,7 @@ fn site_header(search_value: &str) -> String {
 <button type="submit">Search</button>
 </form>
 </header>"#,
-        logo_src,
-        q
+        logo_src, q
     )
 }
 
@@ -875,9 +881,9 @@ fn expandable_mono_html(full: &str, head: usize, tail: usize, id_prefix: &str) -
 fn account_avatar_emoji(account_key: [u8; 32]) -> &'static str {
     // Deterministic avatar choice from public key bytes.
     const AVATARS: [&str; 40] = [
-        "👻", "🦘", "🐱", "🐰", "🦊", "🐼", "🐨", "🦁", "🐯", "🐸", "🐵", "🐶", "🐻", "🦉",
-        "🦄", "🐙", "🐧", "🦋", "🦒", "🦔", "🐺", "🦇", "🦅", "🐬", "🐢", "🦓", "🐘", "🦥",
-        "🦦", "🦩", "🦜", "🐿️", "🦝", "🐆", "🐮", "🐗", "🐭", "🐹", "🦎", "🦛",
+        "👻", "🦘", "🐱", "🐰", "🦊", "🐼", "🐨", "🦁", "🐯", "🐸", "🐵", "🐶", "🐻", "🦉", "🦄",
+        "🐙", "🐧", "🦋", "🦒", "🦔", "🐺", "🦇", "🦅", "🐬", "🐢", "🦓", "🐘", "🦥", "🦦", "🦩",
+        "🦜", "🐿️", "🦝", "🐆", "🐮", "🐗", "🐭", "🐹", "🦎", "🦛",
     ];
     let idx = (account_key[0] as usize) % AVATARS.len();
     AVATARS[idx]
@@ -982,7 +988,8 @@ fn explorer_vip_tab_inner(
         .unwrap_or(&default_periodic);
     let period_label = explorer_format_period_for_bar(pr.period);
     let suffix = format!("/ per {}", period_label);
-    let discount_label = explorer_vip_discount_percent_label(txfee.discount.map(|v| v.0).unwrap_or(0));
+    let discount_label =
+        explorer_vip_discount_percent_label(txfee.discount.map(|v| v.0).unwrap_or(0));
     let direct_coins = explorer_format_coins_u64(txfee.direct_credit.map(|v| v.0).unwrap_or(0));
     let limit_coins = explorer_format_coins_u64(pr.limit);
     format!(
@@ -1119,7 +1126,12 @@ async fn page_accounts(State(st): State<ExplorerState>) -> Html<String> {
                     .and_then(|v| v.as_str())
                     .and_then(|v| v.parse::<u64>().ok())
                     .unwrap_or(0);
-                parsed.push((registry_index, account_key, call_counter, last_activity_timestamp));
+                parsed.push((
+                    registry_index,
+                    account_key,
+                    call_counter,
+                    last_activity_timestamp,
+                ));
             }
         }
         parsed
@@ -1266,7 +1278,9 @@ async fn page_account_section(
         ));
     }
     if history_rows.is_empty() {
-        history_rows = r#"<tr><td colspan="4">No transaction history in archival records.</td></tr>"#.to_string();
+        history_rows =
+            r#"<tr><td colspan="4">No transaction history in archival records.</td></tr>"#
+                .to_string();
     }
 
     let privileges_json = if let Some(ref pb) = privilege_body {
@@ -1298,7 +1312,8 @@ async fn page_account_section(
             .and_then(|v| serde_json::to_value(v).ok())
             .unwrap_or(Value::Object(Map::new()))
     };
-    let vtxo_pretty = serde_json::to_string_pretty(&vtxo_json).unwrap_or_else(|_| "null".to_string());
+    let vtxo_pretty =
+        serde_json::to_string_pretty(&vtxo_json).unwrap_or_else(|_| "null".to_string());
 
     let npub = account_key.to_npub().unwrap_or_else(|| "n/a".to_string());
     let npub_short = if npub.len() > 16 {
@@ -1723,9 +1738,12 @@ async fn page_contracts(State(st): State<ExplorerState>) -> Html<String> {
 
     Html(layout(
         "Contracts — Cube explorer",
-        &format!(r#"<h1>Contracts</h1>
+        &format!(
+            r#"<h1>Contracts</h1>
 <p class="muted">Contracts indexed by registry order.</p>
-<table class="entries-table"><thead><tr><th class="num">Index</th><th>Program name</th><th>Contract ID</th><th class="num">Call counter</th><th>Last time called</th></tr></thead><tbody>{}</tbody></table>"#, table_rows),
+<table class="entries-table"><thead><tr><th class="num">Index</th><th>Program name</th><th>Contract ID</th><th class="num">Call counter</th><th>Last time called</th></tr></thead><tbody>{}</tbody></table>"#,
+            table_rows
+        ),
         "",
     ))
 }
@@ -1804,9 +1822,7 @@ async fn page_batch_by_txid(
     State(st): State<ExplorerState>,
     Path(txid_hex): Path<String>,
 ) -> impl IntoResponse {
-    let txid_bytes: Option<[u8; 32]> = Txid::from_str(&txid_hex)
-        .ok()
-        .map(|t| t.to_byte_array());
+    let txid_bytes: Option<[u8; 32]> = Txid::from_str(&txid_hex).ok().map(|t| t.to_byte_array());
     let Some(txid_bytes) = txid_bytes else {
         return (
             StatusCode::BAD_REQUEST,
@@ -1867,7 +1883,9 @@ async fn page_entry_by_id(
         m.entry_record_by_entry_id(&entry_id)
     };
 
-    let Some((batch_height, batch_txid_bytes, batch_ts, _eid, entry, collected_bits, fees)) = resolved else {
+    let Some((batch_height, batch_txid_bytes, batch_ts, _eid, entry, collected_bits, fees)) =
+        resolved
+    else {
         return (
             StatusCode::NOT_FOUND,
             Html(layout(
@@ -1890,7 +1908,8 @@ async fn page_entry_by_id(
         html_escape(&batch_txid),
         html_escape(&batch_txid),
     );
-    let entry_json = serde_json::to_string_pretty(&entry.json()).unwrap_or_else(|_| "{}".to_string());
+    let entry_json =
+        serde_json::to_string_pretty(&entry.json()).unwrap_or_else(|_| "{}".to_string());
     let entry_fees_json =
         serde_json::to_string_pretty(&fees.map(|v| v.json()).unwrap_or(serde_json::Value::Null))
             .unwrap_or_else(|_| "null".to_string());
@@ -1937,9 +1956,7 @@ async fn page_entry_by_id(
         _ => String::new(),
     };
     let collected_bits_html = match collected_bits {
-        Some(bits) => {
-            expandable_mono_html(&bits, 28, 16, "ape-bits")
-        }
+        Some(bits) => expandable_mono_html(&bits, 28, 16, "ape-bits"),
         None => "N/A (non-archival record)".to_string(),
     };
 
@@ -2012,7 +2029,9 @@ fn render_batch_page(chain: Chain, record: &BatchRecord) -> String {
         };
         let amount_cell = match entry {
             Entry::Move(move_entry) => explorer_format_coins_u64(move_entry.amount as u64),
-            Entry::Liftup(liftup) => explorer_format_coins_u64(liftup.liftup_sum_value_in_satoshis()),
+            Entry::Liftup(liftup) => {
+                explorer_format_coins_u64(liftup.liftup_sum_value_in_satoshis())
+            }
             Entry::Swapout(swapout) => explorer_format_coins_u64(swapout.amount as u64),
             Entry::Deploy(deploy) => explorer_format_coins_u64(deploy.initial_balance as u64),
             Entry::Call(_) | Entry::Config(_) => "N/A".to_string(),
@@ -2024,7 +2043,9 @@ fn render_batch_page(chain: Chain, record: &BatchRecord) -> String {
                 account_link_npub_truncated(move_entry.to.account_key())
             ),
             Entry::Liftup(liftup) => account_link_npub_truncated(liftup.root_account.account_key()),
-            Entry::Swapout(swapout) => account_link_npub_truncated(swapout.root_account.account_key()),
+            Entry::Swapout(swapout) => {
+                account_link_npub_truncated(swapout.root_account.account_key())
+            }
             Entry::Call(call) => account_link_npub_truncated(call.account.account_key()),
             Entry::Deploy(deploy) => account_link_npub_truncated(deploy.root_account.account_key()),
             Entry::Config(config) => account_link_npub_truncated(config.root_account.account_key()),

@@ -92,12 +92,9 @@ impl SignedBatchTxn {
             let mut swapout_tx_outputs = Vec::new();
             for entry in &entries {
                 if let Entry::Swapout(swapout) = entry {
-                    let scriptpubkey = swapout
-                        .pinless_self
-                        .calculated_scriptpubkey()
-                        .ok_or(
-                            SignedBatchTxnConstructError::SwapoutPinlessSelfCalculatedScriptpubkeyError,
-                        )?;
+                    let scriptpubkey = swapout.pinless_self.calculated_scriptpubkey().ok_or(
+                        SignedBatchTxnConstructError::SwapoutPinlessSelfCalculatedScriptpubkeyError,
+                    )?;
                     let txout = TxOut {
                         value: Amount::from_sat(u64::from(swapout.amount)),
                         script_pubkey: ScriptBuf::from(scriptpubkey),

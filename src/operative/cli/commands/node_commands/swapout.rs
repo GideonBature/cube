@@ -91,7 +91,10 @@ pub async fn swapout_command(
     let swapout_bls_signature: [u8; 96] = match swapout.bls_sign(key_holder) {
         Ok(signature) => signature,
         Err(error) => {
-            println!("{}", format!("Error BLS signing swapout: {:?}", error).red());
+            println!(
+                "{}",
+                format!("Error BLS signing swapout: {:?}", error).red()
+            );
             return;
         }
     };

@@ -26,5 +26,8 @@ pub enum RMApplyChangesError {
     ContractNotFoundInMemory(ContractId),
     ContractCallCounterUpdateError(ContractId, u64, sled::Error),
     ContractLastActivityTimestampUpdateError(ContractId, u64, sled::Error),
-    ProgramCompileError(ContractId, crate::executive::executable::compiler::compiler_error::ProgramCompileError),
+    ProgramCompileError(
+        ContractId,
+        crate::executive::executable::compiler::compiler_error::ProgramCompileError,
+    ),
 }

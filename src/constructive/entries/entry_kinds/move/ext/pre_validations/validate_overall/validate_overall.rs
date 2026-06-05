@@ -58,11 +58,9 @@ impl Move {
             let _coin_manager = coin_manager.lock().await;
 
             // 6.2 Resolve sender balance.
-            let available = _coin_manager
-                .get_account_balance(from_account_key)
-                .ok_or(MoveValidateOverallError::FromAccountNotFoundInCoinManagerError(
-                    from_account_key,
-                ))?;
+            let available = _coin_manager.get_account_balance(from_account_key).ok_or(
+                MoveValidateOverallError::FromAccountNotFoundInCoinManagerError(from_account_key),
+            )?;
 
             // 6.3 Reject if sender balance is insufficient.
             if available < required {

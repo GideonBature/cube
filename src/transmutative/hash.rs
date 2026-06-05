@@ -66,19 +66,67 @@ impl HashTag {
             }
             HashTag::FlameConfig => format!("{}/{}", baked::PROJECT_TAG, "flameconfig"),
             // Sighashes
-            HashTag::LiftupEntrySighash => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "sighash", "entry", "liftup"),
-            HashTag::SwapoutEntrySighash => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "sighash", "entry", "swapout"),
-            HashTag::MoveEntrySighash => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "sighash", "entry", "move"),
-            HashTag::ConfigEntrySighash => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "sighash", "entry", "config"),
-            HashTag::DeployEntrySighash => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "sighash", "entry", "deploy"),
-            HashTag::CallEntrySighash => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "sighash", "entry", "call"),
+            HashTag::LiftupEntrySighash => format!(
+                "{}/{}/{}/{}",
+                baked::PROJECT_TAG,
+                "sighash",
+                "entry",
+                "liftup"
+            ),
+            HashTag::SwapoutEntrySighash => format!(
+                "{}/{}/{}/{}",
+                baked::PROJECT_TAG,
+                "sighash",
+                "entry",
+                "swapout"
+            ),
+            HashTag::MoveEntrySighash => format!(
+                "{}/{}/{}/{}",
+                baked::PROJECT_TAG,
+                "sighash",
+                "entry",
+                "move"
+            ),
+            HashTag::ConfigEntrySighash => format!(
+                "{}/{}/{}/{}",
+                baked::PROJECT_TAG,
+                "sighash",
+                "entry",
+                "config"
+            ),
+            HashTag::DeployEntrySighash => format!(
+                "{}/{}/{}/{}",
+                baked::PROJECT_TAG,
+                "sighash",
+                "entry",
+                "deploy"
+            ),
+            HashTag::CallEntrySighash => format!(
+                "{}/{}/{}/{}",
+                baked::PROJECT_TAG,
+                "sighash",
+                "entry",
+                "call"
+            ),
             // Entry IDs
-            HashTag::LiftupEntryID => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "liftup"),
-            HashTag::SwapoutEntryID => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "swapout"),
-            HashTag::MoveEntryID => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "move"),
-            HashTag::ConfigEntryID => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "config"),
-            HashTag::DeployEntryID => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "deploy"),
-            HashTag::CallEntryID => format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "call"),
+            HashTag::LiftupEntryID => {
+                format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "liftup")
+            }
+            HashTag::SwapoutEntryID => {
+                format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "swapout")
+            }
+            HashTag::MoveEntryID => {
+                format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "move")
+            }
+            HashTag::ConfigEntryID => {
+                format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "config")
+            }
+            HashTag::DeployEntryID => {
+                format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "deploy")
+            }
+            HashTag::CallEntryID => {
+                format!("{}/{}/{}/{}", baked::PROJECT_TAG, "id", "entry", "call")
+            }
         }
     }
 }

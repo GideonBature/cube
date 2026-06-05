@@ -14,5 +14,4 @@ pub enum EntrySBEEncodeError {
     SwapoutSBEEncodeError(SwapoutSBEEncodeError),
     DeploySBEEncodeError(DeploySBEEncodeError),
     ConfigSBEEncodeError(ConfigSBEEncodeError),
-
 }
