@@ -37,13 +37,12 @@ impl CalldataElement {
                     });
                 }
             }
-            CalldataElement::Varbytes(bytes) => {
-                if bytes.len() > MAX_VARBYTES_LEN {
-                    return Err(CalldataElementValidationError::VarbytesLengthExceedsMax {
-                        len: bytes.len(),
-                    });
-                }
+            CalldataElement::Varbytes(bytes) if bytes.len() > MAX_VARBYTES_LEN => {
+                return Err(CalldataElementValidationError::VarbytesLengthExceedsMax {
+                    len: bytes.len(),
+                });
             }
+            CalldataElement::Varbytes(_) => {}
             _ => {}
         }
         Ok(())

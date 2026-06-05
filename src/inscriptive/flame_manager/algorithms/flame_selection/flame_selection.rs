@@ -118,7 +118,7 @@ pub fn return_flames_to_fund(
             }
 
             // 4.b.2 Sort tiers in descending order by value (largest first).
-            available_tiers.sort_by(|a, b| b.0.cmp(&a.0));
+            available_tiers.sort_by_key(|tier| std::cmp::Reverse(tier.0));
 
             // 4.b.2.1 Store the smallest tier for rounding up if needed.
             let smallest_tier = available_tiers.last().cloned();
