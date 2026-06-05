@@ -3,7 +3,7 @@
 
 `APE` allows Cube to pack as many transactions as possible into a Bitcoin block, enabling it to handle significantly more transactions compared to zkEVM and EVM. By optimizing transaction encoding, indexing, and signature aggregation, Cube achieves higher throughput and lower transaction costs, making it a highly scalable solution for decentralized Bitcoin applications.
 
-## VM Comparsion
+## VM Comparison
 | VM Type | Encoding                        | Scope      | Indexing        | Nonce     | Gas Price/Limit | Calldata     | Signature      | Error-handling |
 |:--------|:--------------------------------|:-----------|:----------------|-----------|:----------------|:-------------|:---------------|:---------------|
 | Cube    | Airly Payload Encoding (APE)    | Bit-level  | Rank-based      | -         | Negligible      | Non-prefixed | BLS-aggregated | Assertions     |
@@ -60,7 +60,7 @@ Cube replaces `Gas` with `Ops` and introduces a fluctuating `Ops limit` where on
 
 See [Entry](https://github.com/cube-btc/cube/tree/main/src/constructive/entries).
 
-#### 9. Assertations
+#### 9. Assertions
 In Cube, transactions are asserted, meaning that only valid transactions are included in blocks. Failed transactions are never recorded, resulting in a cleaner state and fewer invalid operations. In contrast, both zkEVM and Ethereum allow failed transactions to end up in blocks, which increases overhead and reduces overall efficiency. This means Cube achieves an overall 5% historical block space savings in comparison.
 
 ## Savings
@@ -86,4 +86,4 @@ Taking a standard token transfer as an example, Cube consumes only around ~9.7 b
 
 
 > [!NOTE]
-> Comparisons excludes further savings from (2) common value lookup, (6) signature aggregation, and (9) assertations. Factoring in these optimizations, the efficiency is projected to surpass the estimate.
+> Comparisons excludes further savings from (2) common value lookup, (6) signature aggregation, and (9) assertions. Factoring in these optimizations, the efficiency is projected to surpass the estimate.

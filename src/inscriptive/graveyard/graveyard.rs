@@ -21,7 +21,7 @@ pub const MIN_REDEMPTION_AMOUNT: u64 = 500;
 /// Local storage manager for the storing destroyed accounts.
 ///
 /// High Level Overview: The graveyard is used to store the accounts (plebs and residents) that have been destroyed.
-/// Esentially, it is a list of accounts that have been destroyed and the amount of coins (BTC) they are owed for redemption.
+/// Essentially, it is a list of accounts that have been destroyed and the amount of coins (BTC) they are owed for redemption.
 /// The amount part is the variable part of the database which is updated to zero upon redemption.
 /// Upon redemption, we reset the amount to zero, and still keep the records for historic-record-keeping so that they cannot be re-registered.
 pub struct Graveyard {
