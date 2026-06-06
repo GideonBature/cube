@@ -1,10 +1,10 @@
-use crate::executive::opcode::ops::OP_MFREE_OPS;
 use crate::executive::stack::{
     limits::{MAX_KEY_LENGTH, MIN_KEY_LENGTH},
     stack_error::{MemoryError, StackError},
     stack_holder::StackHolder,
     stack_item::StackItem,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The `OP_MFREE` opcode.
@@ -41,7 +41,7 @@ impl OP_MFREE {
         };
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_MFREE_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_mfree))?;
 
         // Push result to stack.
         stack_holder.push(sweep_result_item)?;
@@ -49,8 +49,8 @@ impl OP_MFREE {
         Ok(())
     }
 
-    /// Returns the bytecode for the `OP_MFREE` opcode (0xcc).
+    /// Returns the bytecode for the `OP_MFREE` opcode (0xd2).
     pub fn bytecode() -> Vec<u8> {
-        vec![0xcc]
+        vec![0xd2]
     }
 }

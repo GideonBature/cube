@@ -6,6 +6,7 @@ use crate::{
     },
     inscriptive::coin_manager::coin_manager::COIN_MANAGER,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Transfers coins from the contract into an account or to another contract.
@@ -151,11 +152,13 @@ impl OP_TRANSFER {
             }
         }
 
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_transfer))?;
+
         Ok(())
     }
 
-    /// Returns the bytecode for the `OP_TRANSFER` opcode (0xc2).
+    /// Returns the bytecode for the `OP_TRANSFER` opcode (0xcc).
     pub fn bytecode() -> Vec<u8> {
-        vec![0xc2]
+        vec![0xcc]
     }
 }

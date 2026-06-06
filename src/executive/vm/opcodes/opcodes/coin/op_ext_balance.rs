@@ -7,6 +7,7 @@ use crate::{
     },
     inscriptive::coin_manager::coin_manager::COIN_MANAGER,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Pushes the account's individual BTC balance into the stack.
@@ -104,11 +105,13 @@ impl OP_EXT_BALANCE {
             }
         }
 
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_ext_balance))?;
+
         Ok(())
     }
 
-    /// Returns the bytecode for the `OP_EXT_BALANCE` opcode (0xc0).
+    /// Returns the bytecode for the `OP_EXT_BALANCE` opcode (0xca).
     pub fn bytecode() -> Vec<u8> {
-        vec![0xc0]
+        vec![0xca]
     }
 }

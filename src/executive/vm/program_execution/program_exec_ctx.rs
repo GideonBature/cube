@@ -120,6 +120,11 @@ impl ProgramExecCtx {
         // Programs repo.
         let registry = &self.registry;
 
+        let params_holder = {
+            let _params_manager = self._params_manager.lock().unwrap();
+            _params_manager.get_params_holder()
+        };
+
         // Execution.
         let exectuion_result = execute(
             internal,
@@ -132,6 +137,7 @@ impl ProgramExecCtx {
             ops_price,
             internal_ops_counter,
             external_ops_counter,
+            params_holder,
             state_manager,
             coin_manager,
             registry,

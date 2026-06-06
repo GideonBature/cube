@@ -1,10 +1,10 @@
-use crate::executive::opcode::ops::OP_MWRITE_OPS;
 use crate::executive::stack::{
     limits::{MAX_CONTRACT_MEMORY_SIZE, MAX_KEY_LENGTH, MIN_KEY_LENGTH, MIN_VALUE_LENGTH},
     stack_error::{MemoryError, StackError},
     stack_holder::StackHolder,
     stack_item::StackItem,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The `OP_MWRITE` opcode.
@@ -66,7 +66,7 @@ impl OP_MWRITE {
             };
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_MWRITE_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_mwrite))?;
 
         // Update the contract's memory size.
         stack_holder.update_memory_size(new_contract_memory_size);
@@ -77,8 +77,8 @@ impl OP_MWRITE {
         Ok(())
     }
 
-    /// Returns the bytecode for the `OP_MWRITE` opcode (0xca).
+    /// Returns the bytecode for the `OP_MWRITE` opcode (0xd0).
     pub fn bytecode() -> Vec<u8> {
-        vec![0xca]
+        vec![0xd0]
     }
 }

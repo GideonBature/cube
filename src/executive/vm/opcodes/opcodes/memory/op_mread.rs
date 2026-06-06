@@ -1,10 +1,10 @@
-use crate::executive::opcode::ops::OP_MREAD_OPS;
 use crate::executive::stack::{
     limits::{MAX_KEY_LENGTH, MIN_KEY_LENGTH},
     stack_error::{MemoryError, StackError},
     stack_holder::StackHolder,
     stack_item::StackItem,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The `OP_MREAD` opcode.
@@ -41,7 +41,7 @@ impl OP_MREAD {
         };
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_MREAD_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_mread))?;
 
         // Push result to stack.
         stack_holder.push(value)?;
@@ -49,8 +49,8 @@ impl OP_MREAD {
         Ok(())
     }
 
-    /// Returns the bytecode for the `OP_MREAD` opcode (0xcb).
+    /// Returns the bytecode for the `OP_MREAD` opcode (0xd1).
     pub fn bytecode() -> Vec<u8> {
-        vec![0xcb]
+        vec![0xd1]
     }
 }

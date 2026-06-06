@@ -5,6 +5,7 @@ use crate::executive::stack::{
     stack_uint::StackItemUintExt,
 };
 use crate::transmutative::bls::verify::bls_verify_aggregate;
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Checks a BLS aggregate signature against a set of keys and messages.
@@ -84,7 +85,7 @@ impl OP_CHECKBLSSIGAGG {
         stack_holder.push(result_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(calculate_ops(count as u32))?;
+        stack_holder.increment_ops(calculate_ops(count as u32, stack_holder))?;
 
         Ok(())
     }
@@ -95,11 +96,9 @@ impl OP_CHECKBLSSIGAGG {
     }
 }
 
-const CHECKBLSSIGAGG_OPS_BASE: u32 = 100;
-const CHECKBLSSIGAGG_OPS_MULTIPLIER: u32 = 50;
-
 // Calculate the number of ops for a CHECKBLSSIGAGG opcode.
-fn calculate_ops(count: u32) -> u32 {
-    // Return the number of ops.
-    CHECKBLSSIGAGG_OPS_BASE + (CHECKBLSSIGAGG_OPS_MULTIPLIER * count)
+fn calculate_ops(count: u32, stack_holder: &StackHolder) -> u32 {
+    let ops = stack_holder.opcode_ops();
+    OpcodeOpsParams::as_u32(ops.op_checkblssigagg_base)
+        + (OpcodeOpsParams::as_u32(ops.op_checkblssigagg_per_count) * count)
 }

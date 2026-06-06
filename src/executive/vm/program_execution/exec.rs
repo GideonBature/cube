@@ -79,14 +79,19 @@ use crate::{
                     op_pick::OP_PICK, op_roll::OP_ROLL, op_rot::OP_ROT, op_swap::OP_SWAP,
                     op_tuck::OP_TUCK,
                 },
-                storage::{op_sread::OP_SREAD, op_swrite::OP_SWRITE},
+                storage::{op_sfree::OP_SFREE, op_sread::OP_SREAD, op_swrite::OP_SWRITE},
             },
+        },
+        opcodes::opcodes::governance::{
+            op_gov_account::OP_GOV_ACCOUNT, op_gov_contract::OP_GOV_CONTRACT,
+            op_reconstitute::OP_RECONSTITUTE, op_update_param::OP_UPDATE_PARAM,
         },
         stack::{stack_holder::StackHolder, stack_item::StackItem},
     },
     inscriptive::{
-        coin_manager::coin_manager::COIN_MANAGER, registry::registry::REGISTRY,
-        state_manager::state_manager::STATE_MANAGER,
+        coin_manager::coin_manager::COIN_MANAGER,
+        params_manager::params_holder::params_holder::ParamsHolder,
+        registry::registry::REGISTRY, state_manager::state_manager::STATE_MANAGER,
     },
 };
 
@@ -121,6 +126,8 @@ pub async fn execute(
     internal_ops_counter: u32,
     // The external ops counter.
     external_ops_counter: ExternalOpsCounter,
+    // Protocol params snapshot for opcode ops pricing.
+    params_holder: ParamsHolder,
     // The state manager.
     state_manager: &STATE_MANAGER,
     // The coin manager.
@@ -215,6 +222,7 @@ pub async fn execute(
         ops_price,
         internal_ops_counter,
         external_ops_counter,
+        params_holder.clone(),
         arg_values,
     ) {
         Ok(stack_holder) => stack_holder,
@@ -722,6 +730,7 @@ pub async fn execute(
                     ops_price,  // Ops price is the same as the current ops price.
                     stack_holder.internal_ops_counter(), // Remainder of the internal ops counter passed to the next call.
                     stack_holder.external_ops_counter(), // Remainder of the external ops counter passed to the next call.
+                    params_holder.clone(),
                     state_manager,
                     coin_manager,
                     registry,
@@ -760,6 +769,7 @@ pub async fn execute(
                     ops_price,  // Ops price is the same as the current ops price.
                     stack_holder.internal_ops_counter(), // Remainder of the internal ops counter passed to the next call.
                     stack_holder.external_ops_counter(), // Remainder of the external ops counter passed to the next call.
+                    params_holder.clone(),
                     state_manager,
                     coin_manager,
                     registry,
@@ -847,6 +857,11 @@ pub async fn execute(
                     .await
                     .map_err(ExecutionError::OpcodeExecutionError)?;
             }
+            Opcode::OP_SFREE(OP_SFREE) => {
+                OP_SFREE::execute(&mut stack_holder, state_manager)
+                    .await
+                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
+            }
 
             // Memory opcodes.
             Opcode::OP_MWRITE(OP_MWRITE) => {
@@ -860,6 +875,24 @@ pub async fn execute(
             Opcode::OP_MFREE(OP_MFREE) => {
                 OP_MFREE::execute(&mut stack_holder)
                     .map_err(ExecutionError::OpcodeExecutionError)?;
+            }
+
+            // Governance opcodes.
+            Opcode::OP_UPDATE_PARAM(OP_UPDATE_PARAM) => {
+                OP_UPDATE_PARAM::execute(&mut stack_holder)
+                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
+            }
+            Opcode::OP_GOV_ACCOUNT(OP_GOV_ACCOUNT) => {
+                OP_GOV_ACCOUNT::execute(&mut stack_holder)
+                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
+            }
+            Opcode::OP_GOV_CONTRACT(OP_GOV_CONTRACT) => {
+                OP_GOV_CONTRACT::execute(&mut stack_holder)
+                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
+            }
+            Opcode::OP_RECONSTITUTE(OP_RECONSTITUTE) => {
+                OP_RECONSTITUTE::execute(&mut stack_holder)
+                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
             }
         }
     }

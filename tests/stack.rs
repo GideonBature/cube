@@ -24,6 +24,11 @@ mod stack_tests {
         },
         vm::program_execution::caller::Caller,
     };
+    use cube::inscriptive::params_manager::params_holder::params_holder::ParamsHolder;
+
+    fn test_params_holder() -> ParamsHolder {
+        ParamsHolder::origin_params_holder()
+    }
 
     #[test]
     fn stack_test() -> Result<(), StackError> {
@@ -42,6 +47,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
         )?;
 
         // Push 0xdeadbeef
@@ -91,6 +97,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
         )?;
 
         // Test 0 + 1 = 1;
@@ -203,6 +210,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::true_item()],
         )?;
 
@@ -248,6 +256,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::true_item()],
         )?;
 
@@ -315,6 +324,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::true_item()],
         )?;
 
@@ -397,6 +407,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::false_item()],
         )?;
 
@@ -482,6 +493,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::false_item()],
         )?;
 
@@ -530,6 +542,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::false_item()],
         )?;
 
@@ -583,6 +596,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::true_item()],
         )?;
 
@@ -636,6 +650,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::true_item()],
         )?;
 
@@ -694,6 +709,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::true_item()],
         )?;
 
@@ -733,6 +749,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::false_item()],
         )?;
 
@@ -785,6 +802,7 @@ mod stack_tests {
             1,
             internal_ops_counter,
             external_ops_counter,
+            test_params_holder(),
             vec![StackItem::false_item()],
         )?;
 

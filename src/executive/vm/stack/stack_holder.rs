@@ -6,6 +6,9 @@ use super::{
     stack_item::StackItem,
 };
 use crate::executive::vm::program_execution::caller::Caller;
+use crate::inscriptive::params_manager::params_holder::{
+    opcode_ops_params::OpcodeOpsParams, params_holder::ParamsHolder,
+};
 use std::collections::HashMap;
 
 /// The stack holder.
@@ -40,6 +43,8 @@ pub struct StackHolder {
     // List of flow encounters nested in each other.
     // Since OP_IF/OP_NOTIF/OP_ELSE/OP_ENDIF can be nested, we need to keep track of the flow encounters.
     flow_encounters: Vec<FlowEncounter>,
+    // Protocol params snapshot for opcode ops pricing.
+    params_holder: ParamsHolder,
 }
 
 impl StackHolder {
@@ -53,6 +58,7 @@ impl StackHolder {
         ops_price: u32,
         internal_ops_counter: u32,
         external_ops_counter: u32,
+        params_holder: ParamsHolder,
     ) -> Result<Self, StackError> {
         // Check if the internal ops counter exceeds the ops budget.
         if internal_ops_counter > ops_budget {
@@ -84,6 +90,7 @@ impl StackHolder {
             internal_ops_counter,
             external_ops_counter,
             flow_encounters: Vec::<FlowEncounter>::new(),
+            params_holder,
         };
 
         // Return the stack holder.
@@ -100,6 +107,7 @@ impl StackHolder {
         ops_price: u32,
         internal_ops_counter: u32,
         external_ops_counter: u32,
+        params_holder: ParamsHolder,
         initial_stack_items: Vec<StackItem>,
     ) -> Result<StackHolder, StackError> {
         // Create a new stack holder.
@@ -112,6 +120,7 @@ impl StackHolder {
             ops_price,
             internal_ops_counter,
             external_ops_counter,
+            params_holder,
         )?;
 
         // Push the items to the stack.
@@ -167,6 +176,16 @@ impl StackHolder {
             }
             None => false,
         }
+    }
+
+    /// Returns the params holder snapshot used for opcode ops pricing.
+    pub fn params(&self) -> &ParamsHolder {
+        &self.params_holder
+    }
+
+    /// Returns the opcode ops params snapshot.
+    pub fn opcode_ops(&self) -> &OpcodeOpsParams {
+        &self.params_holder.opcode_ops
     }
 
     /// Returns the ops budget.
