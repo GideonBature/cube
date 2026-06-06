@@ -12,15 +12,14 @@ impl Contract {
             });
         }
 
-        let contract_id: [u8; 32] = bytes[0..32].try_into().map_err(|_| {
-            ContractSBEDecodeError::ContractSBEContractIdBytesConversionError
-        })?;
+        let contract_id: [u8; 32] = bytes[0..32]
+            .try_into()
+            .map_err(|_| ContractSBEDecodeError::ContractSBEContractIdBytesConversionError)?;
 
-        let registry_index = u64::from_le_bytes(
-            bytes[32..40]
-                .try_into()
-                .map_err(|_| ContractSBEDecodeError::ContractSBERegistryIndexBytesConversionError)?,
-        );
+        let registry_index =
+            u64::from_le_bytes(bytes[32..40].try_into().map_err(|_| {
+                ContractSBEDecodeError::ContractSBERegistryIndexBytesConversionError
+            })?);
 
         Ok(Contract::new(contract_id, registry_index))
     }

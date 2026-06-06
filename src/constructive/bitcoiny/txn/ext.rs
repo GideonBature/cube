@@ -89,7 +89,7 @@ impl TxOutExt for TxOut {
         // Extend bytes.
         bytes.extend_from_slice(&value);
         bytes.extend_from_slice(&script_pubkey_len);
-        bytes.extend_from_slice(&script_pubkey);
+        bytes.extend_from_slice(script_pubkey);
 
         bytes
     }

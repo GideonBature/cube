@@ -56,7 +56,8 @@ pub async fn deploy_command(
     };
 
     let pre_subsidy_fee = match params_holder.deploy_entry_base_fee.checked_add(
-        (program_bytes.len() as u64).saturating_mul(params_holder.deploy_entry_per_program_byte_fee),
+        (program_bytes.len() as u64)
+            .saturating_mul(params_holder.deploy_entry_per_program_byte_fee),
     ) {
         Some(v) => v,
         None => {

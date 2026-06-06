@@ -7,8 +7,8 @@ mod executable_and_method_tests {
                 compiler::compiler::ProgramCompiler,
                 executable::Executable,
                 method::{
-                    compiler::compiler::MethodCompiler, program_method::ProgramMethod,
-                    method_type::MethodType,
+                    compiler::compiler::MethodCompiler, method_type::MethodType,
+                    program_method::ProgramMethod,
                 },
             },
             opcode::{
@@ -37,8 +37,7 @@ mod executable_and_method_tests {
                 Opcode::OP_FAIL(OP_FAIL),
             ];
 
-            let method =
-                ProgramMethod::new(method_name, method_type, call_element_types, script);
+            let method = ProgramMethod::new(method_name, method_type, call_element_types, script);
 
             assert!(method.is_err());
         }
@@ -74,8 +73,7 @@ mod executable_and_method_tests {
                 Opcode::OP_FAIL(OP_FAIL),
             ];
 
-            let method =
-                ProgramMethod::new(method_name, method_type, call_element_types, script);
+            let method = ProgramMethod::new(method_name, method_type, call_element_types, script);
 
             assert!(method.is_err());
         }
@@ -92,8 +90,7 @@ mod executable_and_method_tests {
                 Opcode::OP_PUSHDATA(OP_PUSHDATA(vec![0xde, 0xad, 0xbe, 0xef])),
             ];
 
-            let method =
-                ProgramMethod::new(method_name, method_type, call_element_types, script);
+            let method = ProgramMethod::new(method_name, method_type, call_element_types, script);
 
             assert!(method.is_err());
         }
@@ -111,8 +108,7 @@ mod executable_and_method_tests {
                 Opcode::OP_RETURNALL(OP_RETURNALL),
             ];
 
-            let method =
-                ProgramMethod::new(method_name, method_type, call_element_types, script);
+            let method = ProgramMethod::new(method_name, method_type, call_element_types, script);
 
             assert!(method.is_err());
         }
@@ -129,8 +125,7 @@ mod executable_and_method_tests {
                 Opcode::OP_RETURNALL(OP_RETURNALL),
             ];
 
-            let method =
-                ProgramMethod::new(method_name, method_type, call_element_types, script);
+            let method = ProgramMethod::new(method_name, method_type, call_element_types, script);
 
             assert!(method.is_ok());
         }
@@ -154,8 +149,7 @@ mod executable_and_method_tests {
 
         let mut method_compiled_bytestream = method.compile().unwrap().into_iter();
 
-        let method_decompiled =
-            ProgramMethod::decompile(&mut method_compiled_bytestream).unwrap();
+        let method_decompiled = ProgramMethod::decompile(&mut method_compiled_bytestream).unwrap();
 
         assert_eq!(method, method_decompiled);
 

@@ -53,7 +53,7 @@ impl Peer {
         nns_client: &NNSClient,
     ) -> Result<PEER, TCPError> {
         let (socket_, addr) = {
-            match connect_nns(key, &nns_client, chain).await {
+            match connect_nns(key, nns_client, chain).await {
                 Ok(socket) => {
                     let addr = match socket.peer_addr() {
                         Ok(addr) => addr,
@@ -106,10 +106,7 @@ impl Peer {
     }
 
     pub fn connected(&self) -> bool {
-        match self.connection() {
-            Some(_) => true,
-            None => false,
-        }
+        self.connection().is_some()
     }
 
     pub fn socket(&self) -> Option<SOCKET> {
@@ -123,12 +120,10 @@ impl Peer {
     pub fn addr(&self) -> String {
         match self.connection() {
             Some(connection) => {
-                return format!("{}:{}", connection.1.ip(), connection.1.port());
+                format!("{}:{}", connection.1.ip(), connection.1.port())
             }
-            None => {
-                return "Dead.".to_string();
-            }
-        };
+            None => "Dead.".to_string(),
+        }
     }
 }
 
@@ -155,22 +150,20 @@ impl PeerConnection for PEER {
 
     async fn disconnection(&self) {
         loop {
-            loop {
-                match self.ping().await {
-                    Ok(_) => break,
-                    Err(_) => {
-                        let mut failure_iter: u8 = 0;
-                        loop {
-                            if failure_iter < 3 {
-                                failure_iter += 1;
-                                tokio::time::sleep(Duration::from_secs(5)).await;
-                                continue;
-                            } else {
-                                let mut _peer = self.lock().await;
-                                _peer.set_connection(None);
+            match self.ping().await {
+                Ok(_) => {}
+                Err(_) => {
+                    let mut failure_iter: u8 = 0;
+                    loop {
+                        if failure_iter < 3 {
+                            failure_iter += 1;
+                            tokio::time::sleep(Duration::from_secs(5)).await;
+                            continue;
+                        } else {
+                            let mut _peer = self.lock().await;
+                            _peer.set_connection(None);
 
-                                return ();
-                            }
+                            return;
                         }
                     }
                 }

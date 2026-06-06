@@ -25,14 +25,14 @@ mod batchtxn_test {
         // 1 Construct Engine secret key.
         let engine_secret_key: [u8; 32] =
             hex::decode("2b9906a26e64b48f8f94cf17e9681cf189c74b73d5fe69c2906550a2dcc33b5f")
-                .map_err(|_| format!("Failed to parse secret key hex."))?
+                .map_err(|_| "Failed to parse secret key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Failed to convert secret key hex.".to_string())?;
 
         // 2 Construct Engine public key.
         let engine_public_key: [u8; 32] =
             hex::decode("f437f28e3d9dc4638fe24699feeb89c094544163706faea65b2b72f91cb7267a")
-                .map_err(|_| format!("Failed to parse public key hex."))?
+                .map_err(|_| "Failed to parse public key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Failed to convert public key hex.".to_string())?;
 
@@ -50,14 +50,14 @@ mod batchtxn_test {
         // 5 Construct User secret key.
         let user_secret_key: [u8; 32] =
             hex::decode("5280340afb7ade681b5d761b621818ef73ea6a10a425304d68d27a5d823df403")
-                .map_err(|_| format!("Failed to parse secret key hex."))?
+                .map_err(|_| "Failed to parse secret key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Failed to convert secret key hex.".to_string())?;
 
         // 6 Construct User public key.
         let user_public_key: [u8; 32] =
             hex::decode("06971ffe504c95152517d1be306b89b69e2f33c2c0e2a06b55f09d087b639d50")
-                .map_err(|_| format!("Failed to parse public key hex."))?
+                .map_err(|_| "Failed to parse public key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Failed to convert public key hex.".to_string())?;
 
@@ -104,9 +104,8 @@ mod batchtxn_test {
             .serialize_xonly();
 
         // 13 Encode the tweaked key for the payload to fund into an address.
-        let payload_to_fund_taproot_address =
-            encode_p2tr(chain, payload_to_fund_taproot_key)
-                .expect("Failed to encode taproot address.");
+        let payload_to_fund_taproot_address = encode_p2tr(chain, payload_to_fund_taproot_key)
+            .expect("Failed to encode taproot address.");
 
         println!(
             "Payload to fund taproot address: {}",
@@ -118,7 +117,7 @@ mod batchtxn_test {
         // d1e3db2e7141123a9132976cda6285e6fdd10fe36bbd73fd724c8f4a989985de
         let prev_payload_txid: [u8; 32] =
             hex::decode("de8599984a8f4c72fd73bd6be30fd1fde68562da6c9732913a1241712edbe3d1")
-                .map_err(|_| format!("Failed to parse prev payload txid hex."))?
+                .map_err(|_| "Failed to parse prev payload txid hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Failed to convert prev payload txid hex.".to_string())?;
 
@@ -140,16 +139,15 @@ mod batchtxn_test {
             Some(prev_payload_location),
         );
 
-        let liftv1_address =
-            return_liftv1_address(chain, user_public_key, engine_public_key)
-                .expect("Failed to get liftv1 address.");
+        let liftv1_address = return_liftv1_address(chain, user_public_key, engine_public_key)
+            .expect("Failed to get liftv1 address.");
 
         println!("Liftv1 address: {}", liftv1_address);
 
         // 28d024000e05c1683f11b3ea60623a2529ce20e75b019a3d3280236a5a1e625e
         let funded_lift_txid: [u8; 32] =
             hex::decode("5e621e5a6a2380323d9a015be720ce29253a6260eab3113f68c1050e0024d028")
-                .map_err(|_| format!("Failed to parse prev payload txid hex."))?
+                .map_err(|_| "Failed to parse prev payload txid hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Failed to convert prev payload txid hex.".to_string())?;
 

@@ -42,7 +42,7 @@ pub struct StackHolder {
     flow_encounters: Vec<FlowEncounter>,
 }
 
-impl<'a> StackHolder {
+impl StackHolder {
     /// Creates a new stack holder.
     pub fn new(
         caller: Caller,
@@ -130,7 +130,7 @@ impl<'a> StackHolder {
 
     /// Returns the caller.
     pub fn caller(&self) -> Caller {
-        self.caller.clone()
+        self.caller
     }
 
     /// Returns the timestamp.

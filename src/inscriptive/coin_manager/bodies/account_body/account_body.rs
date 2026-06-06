@@ -22,8 +22,8 @@ impl CMAccountBody {
     /// Constructs a fresh new account body.
     pub fn new(balance: SatoshiAmount, global_shadow_allocs_sum: SatiSatoshiAmount) -> Self {
         Self {
-            balance: balance,
-            global_shadow_allocs_sum: global_shadow_allocs_sum,
+            balance,
+            global_shadow_allocs_sum,
         }
     }
 

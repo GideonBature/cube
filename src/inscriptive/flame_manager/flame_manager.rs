@@ -49,7 +49,7 @@ impl FlameManager {
     /// Constructs a fresh new 'FlameManager'.
     pub fn new(chain: Chain) -> Result<FLAME_MANAGER, FMConstructionError> {
         // 1 Open the accounts db.
-        let accounts_db_path = format!("storage/{}/flames/accounts", chain.to_string());
+        let accounts_db_path = format!("storage/{}/flames/accounts", chain);
         let accounts_db =
             sled::open(accounts_db_path).map_err(FMConstructionError::AccountsDBOpenError)?;
 
@@ -114,7 +114,7 @@ impl FlameManager {
                 // 3.4.4 Store the flame grouped by rollup height.
                 account_flames_by_height
                     .entry(rollup_height)
-                    .or_insert_with(Vec::new)
+                    .or_default()
                     .push((flame_index, flame));
             }
 
@@ -170,13 +170,9 @@ impl FlameManager {
         account_key: AccountKey,
     ) -> Option<HashMap<ProjectorHeight, Vec<(FlameIndex, Flame)>>> {
         // 1 Check if the account is permanently registered.
-        match self.in_memory_flame_set.get(&account_key) {
-            // 1.a The account has a flame set.
-            Some(flame_set) => Some(flame_set.to_owned()),
-
-            // 1.b The account does not have a flame set.
-            None => None,
-        }
+        self.in_memory_flame_set
+            .get(&account_key)
+            .map(|flame_set| flame_set.to_owned())
     }
 
     /// Epheremally registers an account.
@@ -521,7 +517,7 @@ impl FlameManager {
 /// Erases the flame manager by db path.
 pub fn erase_flame_manager(chain: Chain) {
     // Flame manager db path.
-    let flame_manager_db_path = format!("storage/{}/flames/accounts", chain.to_string());
+    let flame_manager_db_path = format!("storage/{}/flames/accounts", chain);
 
     // Erase the path.
     let _ = std::fs::remove_dir_all(flame_manager_db_path);

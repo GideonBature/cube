@@ -96,7 +96,9 @@ impl RootAccount {
 
                 // 2.c.3 Encode the registry index.
                 bytes.extend(
-                    registered_and_configured_root_account.registry_index.to_le_bytes(),
+                    registered_and_configured_root_account
+                        .registry_index
+                        .to_le_bytes(),
                 );
 
                 // 2.c.4 Encode the BLS key.

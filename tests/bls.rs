@@ -107,10 +107,7 @@ mod bls_test {
 
         // Aggregate the signatures.
         let aggregate_signature: [u8; 96] =
-            bls_aggregate(vec![signature_1, signature_2, signature_3])
-                .unwrap()
-                .try_into()
-                .unwrap();
+            bls_aggregate(vec![signature_1, signature_2, signature_3]).unwrap();
 
         // Verify the aggregate signature.
         assert!(bls_verify_aggregate(

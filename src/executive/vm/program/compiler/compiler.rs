@@ -43,7 +43,7 @@ impl ProgramCompiler for Program {
             executable_bytes.extend(
                 method
                     .compile()
-                    .map_err(|e| ProgramCompileError::MethodCompileError(e))?,
+                    .map_err(ProgramCompileError::MethodCompileError)?,
             );
         }
 
@@ -85,8 +85,10 @@ impl ProgramCompiler for Program {
                     .try_into()
                     .map_err(|_| ProgramDecompileError::MetadataLengthBytesCollectError)?;
                 let metadata_len = u16::from_le_bytes(metadata_len_bytes) as usize;
-                let metadata_bytes: Vec<u8> =
-                    bytecode_stream.by_ref().take(metadata_len).collect::<Vec<u8>>();
+                let metadata_bytes: Vec<u8> = bytecode_stream
+                    .by_ref()
+                    .take(metadata_len)
+                    .collect::<Vec<u8>>();
                 if metadata_bytes.len() != metadata_len {
                     return Err(ProgramDecompileError::MetadataBytesCollectError);
                 }
@@ -107,13 +109,13 @@ impl ProgramCompiler for Program {
         let mut methods = Vec::<ProgramMethod>::new();
         for _ in 0..method_count {
             let method = ProgramMethod::decompile(bytecode_stream)
-                .map_err(|e| ProgramDecompileError::MethodDecompileError(e))?;
+                .map_err(ProgramDecompileError::MethodDecompileError)?;
             methods.push(method);
         }
 
         // Construct the executable.
         let executable = Program::new(program_name, metadata, methods)
-            .map_err(|e| ProgramDecompileError::ProgramConstructError(e))?;
+            .map_err(ProgramDecompileError::ProgramConstructError)?;
 
         // Return the executable.
         Ok(executable)

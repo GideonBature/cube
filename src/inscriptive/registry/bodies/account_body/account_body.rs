@@ -1,5 +1,5 @@
-use serde_json::{Map, Value};
 use crate::inscriptive::flame_manager::flame_config::flame_config::FMAccountFlameConfig;
+use serde_json::{Map, Value};
 
 /// BLS key of an account.
 type AccountBLSKey = [u8; 48];
@@ -16,7 +16,7 @@ pub struct RMAccountBody {
     // Assigned registry index of an account.
     pub registry_index: u64,
 
-    // Ever-increasing call counter of an account. 
+    // Ever-increasing call counter of an account.
     pub call_counter: u64,
 
     // Last observed activity timestamp of an account.

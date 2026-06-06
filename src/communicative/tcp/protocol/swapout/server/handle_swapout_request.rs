@@ -22,7 +22,8 @@ pub async fn handle_swapout_request(
     } = match SwapoutRequestBody::deserialize(payload) {
         Some(req) => req,
         None => {
-            let body = SwapoutResponseBody::err(SwapoutResponseError::DeserializeSwapoutRequestError);
+            let body =
+                SwapoutResponseBody::err(SwapoutResponseError::DeserializeSwapoutRequestError);
             let bytes = body.serialize().unwrap_or_default();
             return Some(TCPPackage::new(
                 PackageKind::SwapoutProtocol,
@@ -76,7 +77,8 @@ pub async fn handle_swapout_request(
         .serialize()
         .unwrap_or_default();
 
-    let response_package = TCPPackage::new(PackageKind::SwapoutProtocol, timestamp, &response_bytes);
+    let response_package =
+        TCPPackage::new(PackageKind::SwapoutProtocol, timestamp, &response_bytes);
 
     Some(response_package)
 }

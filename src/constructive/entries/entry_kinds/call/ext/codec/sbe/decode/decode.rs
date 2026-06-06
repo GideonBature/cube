@@ -28,11 +28,11 @@ fn read_u32_len_prefix(
     Ok((len, &bytes[4..]))
 }
 
-fn take_length_prefixed<'a>(
-    bytes: &'a [u8],
+fn take_length_prefixed(
+    bytes: &[u8],
     insufficient_prefix: impl FnOnce(usize) -> CallSBEDecodeError,
     prefix_exceeds: impl FnOnce(usize, usize) -> CallSBEDecodeError,
-) -> Result<(&'a [u8], &'a [u8]), CallSBEDecodeError> {
+) -> Result<(&[u8], &[u8]), CallSBEDecodeError> {
     let (len_u32, rest) = read_u32_len_prefix(bytes, insufficient_prefix)?;
     let len = len_u32 as usize;
     if rest.len() < len {

@@ -1,8 +1,8 @@
 use crate::communicative::peer::peer::PEER;
 use crate::inscriptive::archival_manager::archival_manager::ARCHIVAL_MANAGER;
 use crate::inscriptive::coin_manager::coin_manager::COIN_MANAGER;
-use crate::inscriptive::flame_manager::flame_manager::FLAME_MANAGER;
 use crate::inscriptive::flame_manager::flame_config::flame_config::FMAccountFlameConfig;
+use crate::inscriptive::flame_manager::flame_manager::FLAME_MANAGER;
 use crate::inscriptive::graveyard::graveyard::GRAVEYARD;
 use crate::inscriptive::params_manager::params_manager::PARAMS_MANAGER;
 use crate::inscriptive::privileges_manager::privileges_manager::PRIVILEGES_MANAGER;
@@ -71,7 +71,9 @@ pub async fn run_engine_cli(
                 )
                 .await;
             }
-            "rootaccount" => common_commands::rootaccount::rootaccount_command(key_holder, registry).await,
+            "rootaccount" => {
+                common_commands::rootaccount::rootaccount_command(key_holder, registry).await
+            }
             "engine" => common_commands::engine::engine_command(chain),
             "print" => match parts.get(1).map(String::as_str) {
                 Some("registry") => common_commands::registry::registry_command(registry).await,
@@ -96,7 +98,10 @@ pub async fn run_engine_cli(
                         let account_key = match parse_account_key(account_key_str) {
                             Some(key) => key,
                             None => {
-                                eprintln!("{}", "Invalid account key: expected 32-byte hex.".yellow());
+                                eprintln!(
+                                    "{}",
+                                    "Invalid account key: expected 32-byte hex.".yellow()
+                                );
                                 continue;
                             }
                         };
@@ -124,7 +129,10 @@ pub async fn run_engine_cli(
                         let account_key = match parse_account_key(account_key_str) {
                             Some(key) => key,
                             None => {
-                                eprintln!("{}", "Invalid account key: expected 32-byte hex.".yellow());
+                                eprintln!(
+                                    "{}",
+                                    "Invalid account key: expected 32-byte hex.".yellow()
+                                );
                                 continue;
                             }
                         };
@@ -152,7 +160,10 @@ pub async fn run_engine_cli(
                         let account_key = match parse_account_key(account_key_str) {
                             Some(key) => key,
                             None => {
-                                eprintln!("{}", "Invalid account key: expected 32-byte hex.".yellow());
+                                eprintln!(
+                                    "{}",
+                                    "Invalid account key: expected 32-byte hex.".yellow()
+                                );
                                 continue;
                             }
                         };
@@ -263,7 +274,10 @@ pub async fn run_node_cli(
                         let account_key = match parse_account_key(account_key_str) {
                             Some(key) => key,
                             None => {
-                                eprintln!("{}", "Invalid account key: expected 32-byte hex.".yellow());
+                                eprintln!(
+                                    "{}",
+                                    "Invalid account key: expected 32-byte hex.".yellow()
+                                );
                                 continue;
                             }
                         };
@@ -291,7 +305,10 @@ pub async fn run_node_cli(
                         let account_key = match parse_account_key(account_key_str) {
                             Some(key) => key,
                             None => {
-                                eprintln!("{}", "Invalid account key: expected 32-byte hex.".yellow());
+                                eprintln!(
+                                    "{}",
+                                    "Invalid account key: expected 32-byte hex.".yellow()
+                                );
                                 continue;
                             }
                         };
@@ -319,7 +336,10 @@ pub async fn run_node_cli(
                         let account_key = match parse_account_key(account_key_str) {
                             Some(key) => key,
                             None => {
-                                eprintln!("{}", "Invalid account key: expected 32-byte hex.".yellow());
+                                eprintln!(
+                                    "{}",
+                                    "Invalid account key: expected 32-byte hex.".yellow()
+                                );
                                 continue;
                             }
                         };
@@ -370,8 +390,7 @@ pub async fn run_node_cli(
                     None => {
                         eprintln!(
                             "{}",
-                            "Usage: batchrecord <batch_height> (non-negative integer)."
-                                .yellow()
+                            "Usage: batchrecord <batch_height> (non-negative integer).".yellow()
                         );
                         continue;
                     }
@@ -440,10 +459,7 @@ pub async fn run_node_cli(
                         node_commands::rank::account_rank_command(registry, account_key).await;
                     }
                     _ => {
-                        eprintln!(
-                            "{}",
-                            "Usage: account rank <account_key_hex>.".yellow()
-                        );
+                        eprintln!("{}", "Usage: account rank <account_key_hex>.".yellow());
                     }
                 }
             }
@@ -466,10 +482,7 @@ pub async fn run_node_cli(
                         node_commands::rank::contract_rank_command(registry, contract_id).await;
                     }
                     _ => {
-                        eprintln!(
-                            "{}",
-                            "Usage: contract rank <contract_id_hex>.".yellow()
-                        );
+                        eprintln!("{}", "Usage: contract rank <contract_id_hex>.".yellow());
                     }
                 }
             }
@@ -663,7 +676,7 @@ fn parse_cli_parts(line: Result<String, io::Error>) -> Option<Vec<String>> {
     let line = match line {
         Ok(line) => line,
         Err(_) => {
-            eprintln!("{}", format!("Invalid line.").yellow());
+            eprintln!("{}", "Invalid line.".to_string().yellow());
             return None;
         }
     };
@@ -733,9 +746,13 @@ fn parse_hex_bytes(s: &str) -> Option<Vec<u8>> {
     hex::decode(s.trim_start_matches("0x")).ok()
 }
 
-fn parse_config_fields(
-    args: &[String],
-) -> Option<(Option<Vec<u8>>, Option<[u8; 32]>, Option<FMAccountFlameConfig>)> {
+type ConfigFields = (
+    Option<Vec<u8>>,
+    Option<[u8; 32]>,
+    Option<FMAccountFlameConfig>,
+);
+
+fn parse_config_fields(args: &[String]) -> Option<ConfigFields> {
     let mut sak: Option<Vec<u8>> = None;
     let mut pc: Option<[u8; 32]> = None;
     let mut fc: Option<FMAccountFlameConfig> = None;

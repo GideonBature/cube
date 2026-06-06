@@ -43,8 +43,7 @@ impl GraveyardDelta {
 
     /// Epheremally burries an account and the amount of satoshi they are owed for redemption.
     pub fn ephemerally_bury_account(&mut self, account_key: [u8; 32], redemption_amount: u64) {
-        self.accounts_to_bury
-            .insert(account_key, redemption_amount);
+        self.accounts_to_bury.insert(account_key, redemption_amount);
     }
 
     /// Epheremally redeems an account and its corresponding redemption amount.

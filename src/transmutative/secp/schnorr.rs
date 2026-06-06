@@ -233,18 +233,12 @@ impl Bytes32 for [u8; 32] {
 
     /// Returns whether the given bytes represent a valid scalar.
     fn is_valid_secret(&self) -> bool {
-        match Scalar::from_slice(self) {
-            Ok(_) => true,
-            Err(_) => false,
-        }
+        Scalar::from_slice(self).is_ok()
     }
 
     /// Returns whether the given bytes represent a valid even point.
     fn is_valid_public(&self) -> bool {
-        match self.to_even_point() {
-            Some(_) => true,
-            None => false,
-        }
+        self.to_even_point().is_some()
     }
 }
 

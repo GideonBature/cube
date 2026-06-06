@@ -1,13 +1,12 @@
 #[cfg(test)]
 mod key_tests {
     use cube::transmutative::key::{FromNostrKeyStr, ToNostrKeyStr};
-    use hex;
 
     #[test]
     fn to_nsec() -> Result<(), String> {
         let secret_key_bytes: [u8; 32] =
             hex::decode("bceef655b5a034911f1c3718ce056531b45ef03b4c7b1f15629e867294011a7d")
-                .map_err(|_| format!("Failed to parse secret key hex."))?
+                .map_err(|_| "Failed to parse secret key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Invalid key length. Expected 32 bytes.".to_string())?;
 
@@ -33,7 +32,7 @@ mod key_tests {
 
         let expected_secret_key_bytes: [u8; 32] =
             hex::decode("bceef655b5a034911f1c3718ce056531b45ef03b4c7b1f15629e867294011a7d")
-                .map_err(|_| format!("Failed to parse secret key hex."))?
+                .map_err(|_| "Failed to parse secret key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Invalid key length. Expected 32 bytes.".to_string())?;
 
@@ -46,7 +45,7 @@ mod key_tests {
     fn to_npub() -> Result<(), String> {
         let public_key_bytes: [u8; 32] =
             hex::decode("cbecda1c7d37d4c0aa5466243bb4a0018c31bf06d74fa7338290dd3068db4fed")
-                .map_err(|_| format!("Failed to parse public key hex."))?
+                .map_err(|_| "Failed to parse public key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Invalid key length. Expected 32 bytes.".to_string())?;
 
@@ -72,7 +71,7 @@ mod key_tests {
 
         let expected_public_key_bytes: [u8; 32] =
             hex::decode("cbecda1c7d37d4c0aa5466243bb4a0018c31bf06d74fa7338290dd3068db4fed")
-                .map_err(|_| format!("Failed to parse secret key hex."))?
+                .map_err(|_| "Failed to parse secret key hex.".to_string())?
                 .try_into()
                 .map_err(|_| "Invalid key length. Expected 32 bytes.".to_string())?;
 

@@ -1,10 +1,10 @@
-use crate::{constructive::entry::entry_kinds::call::call::Call, transmutative::hash::Hash};
 use crate::constructive::entry::entry_kinds::config::config::Config;
 use crate::constructive::entry::entry_kinds::deploy::deploy::Deploy;
 use crate::constructive::entry::entry_kinds::liftup::liftup::Liftup;
 use crate::constructive::entry::entry_kinds::r#move::r#move::Move;
 use crate::constructive::entry::entry_kinds::swapout::swapout::Swapout;
 use crate::transmutative::hash::HashTag;
+use crate::{constructive::entry::entry_kinds::call::call::Call, transmutative::hash::Hash};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
@@ -115,7 +115,7 @@ impl Entry {
 
                 // 6 Return the hash.
                 Some(hash)
-            },
+            }
             Entry::Swapout(swapout) => {
                 let mut preimage = Vec::<u8>::new();
                 preimage.extend(batch_height.to_le_bytes());

@@ -1,7 +1,6 @@
 #[cfg(test)]
 mod stack_tests {
     use cube::executive::{
-        vm::program_execution::caller::Caller,
         opcode::opcodes::{
             altstack::{op_fromaltstack::OP_FROMALTSTACK, op_toaltstack::OP_TOALTSTACK},
             arithmetic::op_add::OP_ADD,
@@ -23,6 +22,7 @@ mod stack_tests {
             stack_item::StackItem,
             stack_uint::{StackItemUintExt, StackUint},
         },
+        vm::program_execution::caller::Caller,
     };
 
     #[test]

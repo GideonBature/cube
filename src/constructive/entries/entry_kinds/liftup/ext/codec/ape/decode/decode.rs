@@ -23,15 +23,15 @@ impl Liftup {
         let root_account: RootAccount =
             RootAccount::decode_ape(bit_stream, decode_account_rank_as_longval, registry)
                 .await
-                .map_err(|e| LiftupAPEDecodeError::RootAccountAPEDecodeError(e))?;
+                .map_err(LiftupAPEDecodeError::RootAccountAPEDecodeError)?;
 
         // 2 Decode the `Target` from the bitstream.
         let target: Target = Target::decode_ape(bit_stream, execution_batch_height)
-            .map_err(|e| LiftupAPEDecodeError::TargetAPEDecodeError(e))?;
+            .map_err(LiftupAPEDecodeError::TargetAPEDecodeError)?;
 
         // 3 Decode the number of lifts.
         let number_of_lifts: u32 = ShortVal::decode_ape(bit_stream)
-            .map_err(|e| LiftupAPEDecodeError::NumberOfLiftsAPEDecodeError(e))?
+            .map_err(LiftupAPEDecodeError::NumberOfLiftsAPEDecodeError)?
             .value();
 
         // 4 Collect the outpoints for each lift.

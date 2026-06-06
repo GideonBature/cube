@@ -54,7 +54,7 @@ impl Program {
 
         // Validate the methods.
         Self::validate_methods_inner(&methods)
-            .map_err(|e| ProgramConstructionError::MethodValidationError(e))?;
+            .map_err(ProgramConstructionError::MethodValidationError)?;
 
         // Order the methods.
         let ordered_methods = Self::order_methods(methods);
@@ -131,7 +131,7 @@ impl Program {
     }
 
     /// Validates the methods.
-    fn validate_methods_inner(methods: &Vec<ProgramMethod>) -> Result<(), MethodValidationError> {
+    fn validate_methods_inner(methods: &[ProgramMethod]) -> Result<(), MethodValidationError> {
         // Check for duplicate method names.
         {
             let mut method_names = HashSet::<String>::new();
@@ -171,10 +171,9 @@ impl Program {
         };
 
         // Get the contract ID hash.
-        let contract_id = compiled_bytes.hash(Some(HashTag::ContractID));
 
         // Return the contract ID.
-        contract_id
+        compiled_bytes.hash(Some(HashTag::ContractID))
     }
 
     /// Returns the executable as a JSON object.

@@ -1,7 +1,7 @@
-use crate::executive::executable::program_error::ProgramConstructionError;
 use crate::executive::executable::method::compiler::compiler_error::{
     MethodCompileError, MethodDecompileError,
 };
+use crate::executive::executable::program_error::ProgramConstructionError;
 use std::fmt;
 
 /// The error that occurs when compiling a program.

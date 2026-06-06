@@ -25,7 +25,7 @@ impl CalldataElement {
     /// * `element_type` - The type of the `CallElement`.
     /// * `registry_manager` - The `Registry Manager`.
     /// * `decode_rank_as_longval` - Whether to decode the rank value as a `LongVal` or a `ShortVal`.
-    pub async fn decode_ape<'a>(
+    pub async fn decode_ape(
         bit_stream: &mut bit_vec::Iter<'_>,
         element_type: CalldataElementType,
         registry: &REGISTRY,
@@ -142,7 +142,7 @@ impl CalldataElement {
             // Decode the `Account`.
             CalldataElementType::Account => {
                 // Decode the `Account`.
-                let account = Account::decode_ape(bit_stream, &registry, decode_rank_as_longval)
+                let account = Account::decode_ape(bit_stream, registry, decode_rank_as_longval)
                     .await
                     .map_err(|e| {
                         CalldataElementAPEDecodeError::Account(
@@ -160,7 +160,7 @@ impl CalldataElement {
             // Decode the `Contract`.
             CalldataElementType::Contract => {
                 // Decode the `Contract`.
-                let contract = Contract::decode_ape(bit_stream, &registry, decode_rank_as_longval)
+                let contract = Contract::decode_ape(bit_stream, registry, decode_rank_as_longval)
                     .await
                     .map_err(|e| {
                         CalldataElementAPEDecodeError::Contract(
@@ -181,14 +181,14 @@ impl CalldataElement {
                 let byte_length = index as usize + 1;
 
                 // Check if the data length is valid.
-                if byte_length < 1 || byte_length > 256 {
+                if !(1..=256).contains(&byte_length) {
                     return Err(CalldataElementAPEDecodeError::Bytes(
                         BytesAPEDecodeError::InvalidBytesLength(byte_length),
                     ));
                 }
 
                 // Get the number of bits to collect.
-                let bit_length = byte_length as usize * 8;
+                let bit_length = byte_length * 8;
 
                 // Collect the data bits.
                 let mut data_bits = BitVec::new();

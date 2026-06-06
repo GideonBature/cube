@@ -89,8 +89,9 @@ impl RootAccount {
                     let _registry = registry.lock().await;
 
                     // 1.b.3.2 Get account info by account key.
-                    let account_info = _registry
-                        .get_account_info_by_account_key(registered_but_unconfigured_root_account.account_key);
+                    let account_info = _registry.get_account_info_by_account_key(
+                        registered_but_unconfigured_root_account.account_key,
+                    );
 
                     // 1.b.3.3 Match on account info.
                     match account_info {
@@ -124,7 +125,9 @@ impl RootAccount {
             }
 
             // 1.c `RegisteredAndConfiguredRootAccount`
-            RootAccount::RegisteredAndConfiguredRootAccount(registered_and_configured_root_account) => {
+            RootAccount::RegisteredAndConfiguredRootAccount(
+                registered_and_configured_root_account,
+            ) => {
                 // 1.c.1 Validate Schnorr / BLS key material.
                 if !registered_and_configured_root_account.validate_schnorr_and_bls_key() {
                     return Err(
@@ -138,8 +141,9 @@ impl RootAccount {
                     let _registry = registry.lock().await;
 
                     // 1.c.2.2 Get account info by account key.
-                    let account_info = _registry
-                        .get_account_info_by_account_key(registered_and_configured_root_account.account_key);
+                    let account_info = _registry.get_account_info_by_account_key(
+                        registered_and_configured_root_account.account_key,
+                    );
 
                     // 1.c.2.3 Match on account info.
                     match account_info {

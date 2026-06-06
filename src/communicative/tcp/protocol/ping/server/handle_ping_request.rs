@@ -4,7 +4,7 @@ use crate::communicative::tcp::package::{PackageKind, TCPPackage};
 
 /// Builds the ping response package, or `None` if the request payload is invalid.
 pub async fn handle_ping_request(timestamp: i64, payload: &[u8]) -> Option<TCPPackage> {
-    if payload != &[0x00] {
+    if payload != [0x00] {
         return None;
     }
 

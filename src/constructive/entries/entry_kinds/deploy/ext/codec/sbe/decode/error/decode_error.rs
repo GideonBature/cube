@@ -4,18 +4,37 @@ use crate::constructive::core_types::target::ext::codec::sbe::decode::error::dec
 /// Errors that can occur when decoding a `Deploy` from Structural Byte-scope Encoding (SBE) bytes.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub enum DeploySBEDecodeError {
-    InvalidEntryKindByteError { expected: u8, got: u8 },
-    DeploySBEInsufficientBytesForRootAccountLengthPrefix { got_total: usize },
+    InvalidEntryKindByteError {
+        expected: u8,
+        got: u8,
+    },
+    DeploySBEInsufficientBytesForRootAccountLengthPrefix {
+        got_total: usize,
+    },
     DeploySBERootAccountLengthPrefixBytesConversionError,
-    DeploySBERootAccountLengthPrefixExceedsPayload { root_len: usize, got_after_prefix: usize },
+    DeploySBERootAccountLengthPrefixExceedsPayload {
+        root_len: usize,
+        got_after_prefix: usize,
+    },
     DeploySBERootAccountDecodeError(RootAccountSBEDecodeError),
-    DeploySBEInsufficientBytesForProgramLengthPrefix { got_total: usize },
+    DeploySBEInsufficientBytesForProgramLengthPrefix {
+        got_total: usize,
+    },
     DeploySBEProgramLengthPrefixBytesConversionError,
-    DeploySBEProgramLengthPrefixExceedsPayload { program_len: usize, got_after_prefix: usize },
+    DeploySBEProgramLengthPrefixExceedsPayload {
+        program_len: usize,
+        got_after_prefix: usize,
+    },
     DeploySBEProgramDecompileError,
-    DeploySBEInsufficientBytesForInitialBalance { got_total: usize },
+    DeploySBEInsufficientBytesForInitialBalance {
+        got_total: usize,
+    },
     DeploySBEInitialBalanceBytesConversionError,
-    DeploySBEInsufficientBytesForTarget { got_total: usize },
+    DeploySBEInsufficientBytesForTarget {
+        got_total: usize,
+    },
     DeploySBETargetDecodeError(TargetSBEDecodeError),
-    DeploySBETrailingBytesAfterDeploy { trailing: usize },
+    DeploySBETrailingBytesAfterDeploy {
+        trailing: usize,
+    },
 }

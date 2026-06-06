@@ -54,6 +54,12 @@ impl Stack {
         self.0.last().cloned().ok_or(StackError::EmptyStack)
     }
 }
+
+impl Default for Stack {
+    fn default() -> Self {
+        Self::new()
+    }
+}
 impl fmt::Display for Stack {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         writeln!(f)?;

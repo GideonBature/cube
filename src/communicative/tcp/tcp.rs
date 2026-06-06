@@ -42,7 +42,7 @@ pub async fn open_port(chain: Chain) -> bool {
     };
 
     for result in add_ports([upnp_config]) {
-        if let Ok(_) = result {
+        if result.is_ok() {
             return true;
         }
     }
@@ -199,7 +199,7 @@ pub async fn request(
     let timeout_duration = timeout.unwrap_or(Duration::from_millis(3_000)); // Default timeout: 3000 ms
 
     // Write the request buffer with timeout.
-    write(&mut *_socket, &package.serialize(), Some(timeout_duration)).await?;
+    write(&mut _socket, &package.serialize(), Some(timeout_duration)).await?;
 
     let remaining_time = timeout_duration
         .checked_sub(start.elapsed())
@@ -214,7 +214,7 @@ pub async fn request(
         .ok_or(TCPError::Timeout)?;
 
 
-                let response_package = match pop(&mut *_socket, Some(remaining_time)).await {
+                let response_package = match pop(&mut _socket, Some(remaining_time)).await {
                     Some(package) => package,
                     None => return Err(TCPError::Timeout),
                 };
@@ -232,13 +232,12 @@ pub async fn request(
 }
 
 pub async fn connectivity() -> bool {
-    match tokio::time::timeout(
-        Duration::from_secs(TCP_RESPONSE_TIMEOUT),
-        TcpStream::connect("8.8.8.8:53"),
+    matches!(
+        tokio::time::timeout(
+            Duration::from_secs(TCP_RESPONSE_TIMEOUT),
+            TcpStream::connect("8.8.8.8:53"),
+        )
+        .await,
+        Ok(Ok(_stream))
     )
-    .await
-    {
-        Ok(Ok(_stream)) => true,
-        _ => false,
-    }
 }

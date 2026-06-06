@@ -328,7 +328,7 @@ impl ExecCtx {
                 .lock()
                 .await
                 .insert_batch_record(batch_record.clone())
-                .map_err(|error| ApplyChangesError::ArchivalManagerInsertBatchRecordError(error))?;
+                .map_err(ApplyChangesError::ArchivalManagerInsertBatchRecordError)?;
         }
 
         // 15 Flush the changes.
@@ -435,12 +435,11 @@ impl ExecCtx {
         // 17 Iterate one tx input to get the prev payload outpoint.
         let prev_payload_outpoint = {
             // 17.1 Iterate one tx input for the payload.
-            let bitcoin_tx_input = bitcoin_tx_inputs_iter
-                .next()
-                .ok_or(BatchExecutionError::FailedToIterAndGetPayloadTxInputError)?;
 
             // 17.2 Return the payload outpoint.
-            bitcoin_tx_input.clone()
+            bitcoin_tx_inputs_iter
+                .next()
+                .ok_or(BatchExecutionError::FailedToIterAndGetPayloadTxInputError)?
         };
 
         // 18 Check if the prev payload outpoint matches to the payload tip outpoint in the sync manager.
@@ -502,8 +501,7 @@ impl ExecCtx {
                 // 22.1 Iterate one tx input for the expired projector.
                 let expired_projector_outpoint = bitcoin_tx_inputs_iter
                     .next()
-                    .ok_or(BatchExecutionError::FailedToIterateExpiredProjectorsError)?
-                    .clone();
+                    .ok_or(BatchExecutionError::FailedToIterateExpiredProjectorsError)?;
 
                 // 22.2 Add the expired projector outpoint to the expired projector outpoints list.
                 expired_projector_outpoints.push(expired_projector_outpoint);
@@ -522,8 +520,10 @@ impl ExecCtx {
                         .ok_or(BatchExecutionError::FailedToIterAndGetProjectorTxOutputError)?;
 
                     // 23.a.2 Get the new projector outpoint.
-                    let new_projector_outpoint =
-                        OutPoint::from_txid_and_vout(batch_container.signed_batch_txn.txid(), tx_output_index_cursor);
+                    let new_projector_outpoint = OutPoint::from_txid_and_vout(
+                        batch_container.signed_batch_txn.txid(),
+                        tx_output_index_cursor,
+                    );
 
                     // 23.a.3 Construct the projector.
                     let projector = Some(Projector {
@@ -552,20 +552,23 @@ impl ExecCtx {
         // 26 Initialize the executed entry account BLS keys list.
         let mut executed_entry_account_bls_keys: Vec<[u8; 48]> = Vec::new();
         let collect_entry_ape_bits = self.archival_manager.is_some();
-        let mut collected_entry_ape_bits: Option<Vec<String>> = collect_entry_ape_bits.then(Vec::new);
+        let mut collected_entry_ape_bits: Option<Vec<String>> =
+            collect_entry_ape_bits.then(Vec::new);
 
         let batch_txid = batch_container.signed_batch_txn.txid();
-        let remaining_tx_outputs_for_entries: Vec<(OutPoint, bitcoin::TxOut)> = bitcoin_tx_outputs_iter
-            .cloned()
-            .enumerate()
-            .map(|(i, txout)| {
-                (
-                    OutPoint::from_txid_and_vout(batch_txid, tx_output_index_cursor + i as u32),
-                    txout,
-                )
-            })
-            .collect();
-        let mut remaining_tx_outputs_for_entries_iter = remaining_tx_outputs_for_entries.into_iter();
+        let remaining_tx_outputs_for_entries: Vec<(OutPoint, bitcoin::TxOut)> =
+            bitcoin_tx_outputs_iter
+                .cloned()
+                .enumerate()
+                .map(|(i, txout)| {
+                    (
+                        OutPoint::from_txid_and_vout(batch_txid, tx_output_index_cursor + i as u32),
+                        txout,
+                    )
+                })
+                .collect();
+        let mut remaining_tx_outputs_for_entries_iter =
+            remaining_tx_outputs_for_entries.into_iter();
 
         // 27 Decode entries from the payload one by one and execute them.
         while ape_bitstream.len() > 0 {
@@ -631,7 +634,10 @@ impl ExecCtx {
                 // 27.2.b The `Entry` is a `Move`.
                 Entry::Move(move_entry) => {
                     // 27.2.b.1 Execute the `Move` `Entry`.
-                    match self.execute_move_internal(&move_entry, batch_timestamp).await {
+                    match self
+                        .execute_move_internal(&move_entry, batch_timestamp)
+                        .await
+                    {
                         // 27.2.b.1.a Success.
                         Ok(fees) => {
                             // 27.2.b.1.a.1 Add the move entry to the executed entries.
@@ -660,7 +666,10 @@ impl ExecCtx {
                     }
                 }
                 Entry::Swapout(swapout) => {
-                    match self.execute_swapout_internal(&swapout, batch_timestamp).await {
+                    match self
+                        .execute_swapout_internal(&swapout, batch_timestamp)
+                        .await
+                    {
                         Ok(fees) => {
                             executed_entries.push(Entry::new_swapout(swapout.clone()));
                             executed_entry_fees.push(fees);
@@ -673,7 +682,9 @@ impl ExecCtx {
                             executed_entry_sighashes.push(sighash);
                             executed_entry_account_bls_keys.push(swapout.root_account.bls_key());
                         }
-                        Err(error) => return Err(BatchExecutionError::SwapoutExecutionError(error)),
+                        Err(error) => {
+                            return Err(BatchExecutionError::SwapoutExecutionError(error))
+                        }
                     }
                 }
                 Entry::Deploy(deploy) => {

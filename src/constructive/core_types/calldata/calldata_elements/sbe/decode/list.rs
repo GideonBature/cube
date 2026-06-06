@@ -6,9 +6,9 @@ pub fn decode_calldata_elements_sbe(
     bytes: &[u8],
 ) -> Result<Vec<CalldataElement>, CalldataElementsSBEDecodeError> {
     if bytes.len() < 4 {
-        return Err(CalldataElementsSBEDecodeError::InsufficientBytesForElementCount {
-            got: bytes.len(),
-        });
+        return Err(
+            CalldataElementsSBEDecodeError::InsufficientBytesForElementCount { got: bytes.len() },
+        );
     }
 
     let count = u32::from_le_bytes(
@@ -21,17 +21,18 @@ pub fn decode_calldata_elements_sbe(
     let mut elements = Vec::with_capacity(count);
 
     for _ in 0..count {
-        let (element, remaining) = CalldataElement::decode_sbe(rest).map_err(|e| {
-            CalldataElementsSBEDecodeError::Element(e)
-        })?;
+        let (element, remaining) =
+            CalldataElement::decode_sbe(rest).map_err(CalldataElementsSBEDecodeError::Element)?;
         elements.push(element);
         rest = remaining;
     }
 
     if !rest.is_empty() {
-        return Err(CalldataElementsSBEDecodeError::TrailingBytesAfterCalldataList {
-            trailing: rest.len(),
-        });
+        return Err(
+            CalldataElementsSBEDecodeError::TrailingBytesAfterCalldataList {
+                trailing: rest.len(),
+            },
+        );
     }
 
     Ok(elements)

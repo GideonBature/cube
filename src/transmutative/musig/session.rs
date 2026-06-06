@@ -33,11 +33,15 @@ impl MusigSessionCtx {
     }
 
     pub fn insert_nonce(&mut self, key: Point, hiding_nonce: Point, binding_nonce: Point) -> bool {
-        if let None = self.key_agg_ctx.key_index(key) {
+        if self.key_agg_ctx.key_index(key).is_none() {
             return false;
         }
 
-        if let Some(_) = self.nonces.insert(key, (hiding_nonce, binding_nonce)) {
+        if self
+            .nonces
+            .insert(key, (hiding_nonce, binding_nonce))
+            .is_some()
+        {
             return false;
         }
 
@@ -64,7 +68,7 @@ impl MusigSessionCtx {
             None => return,
         };
 
-        if let None = self.nonce_coef {
+        if self.nonce_coef.is_none() {
             self.nonce_coef = Some(nonce_coef)
         };
 
@@ -73,7 +77,7 @@ impl MusigSessionCtx {
             MaybePoint::Infinity => return,
         };
 
-        if let None = self.agg_nonce {
+        if self.agg_nonce.is_none() {
             self.agg_nonce = Some(agg_nonce)
         };
 
@@ -83,7 +87,7 @@ impl MusigSessionCtx {
             None => return,
         };
 
-        if let None = self.challenge {
+        if self.challenge.is_none() {
             self.challenge = Some(challenge)
         };
     }
@@ -119,34 +123,25 @@ impl MusigSessionCtx {
         secet_binding_nonce: Scalar,
     ) -> Option<Scalar> {
         let public_key = secret_key.base_point_mul();
-        let key_coef = match self.key_agg_ctx.key_coef(public_key) {
-            Some(coef) => coef,
-            None => return None,
-        };
+        let key_coef = self.key_agg_ctx.key_coef(public_key)?;
 
-        let (hiding_public_nonce, binding_public_nonce) = match self.nonces.get(&public_key) {
-            Some(tuple) => tuple,
-            None => return None,
-        };
+        let (hiding_public_nonce, binding_public_nonce) = self.nonces.get(&public_key)?;
 
-        if secret_hiding_nonce.base_point_mul() != hiding_public_nonce.to_owned() {
+        if secret_hiding_nonce.base_point_mul() != *hiding_public_nonce {
             return None;
         };
 
-        if secet_binding_nonce.base_point_mul() != binding_public_nonce.to_owned() {
+        if secet_binding_nonce.base_point_mul() != *binding_public_nonce {
             return None;
         };
 
         let mut secret_key = secret_key.negate_if(self.key_agg_ctx.agg_inner_key().parity());
 
-        if let Some(_) = self.key_agg_ctx.tweak() {
+        if self.key_agg_ctx.tweak().is_some() {
             secret_key = secret_key.negate_if(self.key_agg_ctx.agg_key().parity());
         }
 
-        let challenge = match self.challenge {
-            Some(challenge) => challenge,
-            None => return None,
-        };
+        let challenge = self.challenge?;
 
         let nonce_coef = self.nonce_coef?;
         let agg_nonce = self.agg_nonce?;
@@ -167,7 +162,7 @@ impl MusigSessionCtx {
     }
 
     pub fn insert_partial_sig(&mut self, signer_key: Point, partial_sig: Scalar) -> bool {
-        if let Some(_) = self.partial_sigs.get(&signer_key) {
+        if self.partial_sigs.contains_key(&signer_key) {
             return false;
         }
 
@@ -183,7 +178,7 @@ impl MusigSessionCtx {
 
         let mut key = signer_key.negate_if(self.key_agg_ctx.agg_inner_key().parity());
 
-        if let Some(_) = self.key_agg_ctx.tweak() {
+        if self.key_agg_ctx.tweak().is_some() {
             key = key.negate_if(self.key_agg_ctx.agg_key().parity());
         }
 
@@ -226,7 +221,7 @@ impl MusigSessionCtx {
         let mut blame_list = Vec::<Point>::new();
 
         for key in self.key_agg_ctx.keys().iter() {
-            if let None = self.partial_sigs.get(&key) {
+            if !self.partial_sigs.contains_key(key) {
                 blame_list.push(key.to_owned());
             }
         }
@@ -236,14 +231,14 @@ impl MusigSessionCtx {
 
     pub fn agg_sig(&self) -> Option<Scalar> {
         println!("mara 0: {}", self.blame_list().len());
-        if self.blame_list().len() != 0 {
+        if !self.blame_list().is_empty() {
             return None;
         }
         println!("mara 1");
         let mut agg_sig = MaybeScalar::Zero;
 
         for (_, partial_sig) in self.partial_sigs.iter() {
-            agg_sig = agg_sig + partial_sig.to_owned();
+            agg_sig += partial_sig.to_owned();
         }
 
         let challenge = self.challenge?;
@@ -252,15 +247,15 @@ impl MusigSessionCtx {
             let parity: bool = self.key_agg_ctx.agg_key().parity().into();
 
             if parity {
-                agg_sig = agg_sig + (challenge * tweak) * Scalar::max()
+                agg_sig += (challenge * tweak) * Scalar::max()
             } else {
-                agg_sig = agg_sig + (challenge * tweak)
+                agg_sig += challenge * tweak
             }
         }
 
         match agg_sig {
-            MaybeScalar::Valid(scalar) => return Some(scalar),
-            MaybeScalar::Zero => return None,
+            MaybeScalar::Valid(scalar) => Some(scalar),
+            MaybeScalar::Zero => None,
         }
     }
 
@@ -313,15 +308,15 @@ fn nonce_coef(
 }
 
 fn pre_nonce_agg(nonces: &HashMap<Point, (Point, Point)>) -> Option<(Point, Point)> {
-    let mut sorted_nonces: Vec<_> = nonces.into_iter().collect();
+    let mut sorted_nonces: Vec<_> = nonces.iter().collect();
     sorted_nonces.sort_by_key(|(key, _)| *key);
 
     let mut hiding_agg_nonce_ = MaybePoint::Infinity;
     let mut binding_agg_nonce_ = MaybePoint::Infinity;
 
     for (_, (hiding_nonce, binding_nonce)) in sorted_nonces {
-        hiding_agg_nonce_ = hiding_agg_nonce_ + hiding_nonce.to_owned();
-        binding_agg_nonce_ = binding_agg_nonce_ + binding_nonce.to_owned();
+        hiding_agg_nonce_ += hiding_nonce.to_owned();
+        binding_agg_nonce_ += binding_nonce.to_owned();
     }
 
     let hiding_agg_nonce = match hiding_agg_nonce_ {

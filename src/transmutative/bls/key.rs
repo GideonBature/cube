@@ -50,7 +50,7 @@ pub fn bls_secret_key_bytes_to_bls_secret_key(secret_key_bytes: [u8; 48]) -> BLS
 ///
 pub fn bls_public_key_bytes_to_bls_public_key(public_key_bytes: [u8; 48]) -> Option<BLSPublicKey> {
     // 1 Convert the 48-byte public key to a BLS public key.
-    public_key_bytes.try_into().ok()
+    Some(public_key_bytes.into())
 }
 
 /// Converts a BLS secret key to a BLS public key.
@@ -61,5 +61,5 @@ pub fn bls_public_key_bytes_to_bls_public_key(public_key_bytes: [u8; 48]) -> Opt
 ///
 pub fn bls_secret_key_to_bls_public_key(secret_key: BLSSecretKey) -> Option<BLSPublicKey> {
     // 1 Convert the BLS secret key to a BLS public key.
-    bls::sk_to_pk(secret_key).try_into().ok()
+    Some(bls::sk_to_pk(secret_key))
 }

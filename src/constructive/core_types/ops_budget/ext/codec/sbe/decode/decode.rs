@@ -15,9 +15,7 @@ impl OpsBudget {
     pub fn decode_sbe(bytes: &[u8]) -> Result<(OpsBudget, &[u8]), OpsBudgetSBEDecodeError> {
         // 1 Read the presence byte.
         if bytes.is_empty() {
-            return Err(OpsBudgetSBEDecodeError::OpsBudgetSBEInsufficientPayloadBytes {
-                got: 0,
-            });
+            return Err(OpsBudgetSBEDecodeError::OpsBudgetSBEInsufficientPayloadBytes { got: 0 });
         }
 
         match bytes[0] {
@@ -27,9 +25,11 @@ impl OpsBudget {
             // 2.b Present — tier byte plus compact value bytes.
             1 => {
                 if bytes.len() < 2 {
-                    return Err(OpsBudgetSBEDecodeError::OpsBudgetSBEInsufficientPayloadBytes {
-                        got: bytes.len(),
-                    });
+                    return Err(
+                        OpsBudgetSBEDecodeError::OpsBudgetSBEInsufficientPayloadBytes {
+                            got: bytes.len(),
+                        },
+                    );
                 }
 
                 let compact_len = short_val_compact_len(bytes[1]).ok_or(
@@ -37,9 +37,11 @@ impl OpsBudget {
                 )?;
 
                 if bytes.len() < 2 + compact_len {
-                    return Err(OpsBudgetSBEDecodeError::OpsBudgetSBEInsufficientPayloadBytes {
-                        got: bytes.len(),
-                    });
+                    return Err(
+                        OpsBudgetSBEDecodeError::OpsBudgetSBEInsufficientPayloadBytes {
+                            got: bytes.len(),
+                        },
+                    );
                 }
 
                 let budget = ShortVal::from_compact_bytes(&bytes[2..2 + compact_len])

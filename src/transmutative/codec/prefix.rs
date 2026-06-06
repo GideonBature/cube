@@ -16,7 +16,7 @@ impl Prefix for Bytes {
         let mut bytes = Vec::<u8>::new();
         let data_len = self.len();
 
-        if data_len == 1 && (&self[0] == &0x81 || &self[0] <= &16) {
+        if data_len == 1 && (self[0] == 0x81 || self[0] <= 16) {
             // Check minimal push.
             // https://github.com/bitcoin/bitcoin/blob/master/src/script/script.cpp#L366
             match &self[0] {

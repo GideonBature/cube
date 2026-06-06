@@ -58,9 +58,7 @@ impl Payload {
 
     /// Returns the outpoint for the Payload.
     pub fn outpoint(&self) -> Option<OutPoint> {
-        self.location
-            .as_ref()
-            .map(|(outpoint, _txout)| outpoint.clone())
+        self.location.as_ref().map(|(outpoint, _txout)| *outpoint)
     }
 
     /// Returns the txout for the Payload.
@@ -304,12 +302,11 @@ pub fn genesis_payload(chain: Chain) -> Payload {
     );
 
     // 9 Construct the genesis payload with location.
-    let genesis_payload = Payload::new(
+
+    // 10 Return the genesis payload.
+    Payload::new(
         engine_key,
         genesis_payload_without_location.payload_bytes.clone(),
         Some(location),
-    );
-
-    // 10 Return the genesis payload.
-    genesis_payload
+    )
 }

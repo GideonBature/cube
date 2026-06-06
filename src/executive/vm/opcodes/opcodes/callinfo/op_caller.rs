@@ -1,6 +1,6 @@
 use crate::executive::{
-    vm::program_execution::caller::Caller,
     stack::{stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem},
+    vm::program_execution::caller::Caller,
 };
 use serde::{Deserialize, Serialize};
 

@@ -39,3 +39,13 @@ path = "src/lib.rs"
 [[bin]]
 name = "cube"
 path = "src/operative/main.rs"
+
+[lints.clippy]
+module_inception = "allow"
+result_large_err = "allow"
+too_many_arguments = "allow"
+wrong_self_convention = "allow"
+large_enum_variant = "allow"
+manual_div_ceil = "allow"
+assign_op_pattern = "allow"
+manual_async_fn = "allow"

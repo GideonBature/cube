@@ -24,8 +24,9 @@ impl Config {
         match &self.secondary_aggregation_key {
             Some(key) => {
                 bits.push(true);
-                let key_len = u32::try_from(key.len())
-                    .map_err(|_| ConfigAPEEncodeError::SecondaryAggregationKeyLenTooLarge(key.len()))?;
+                let key_len = u32::try_from(key.len()).map_err(|_| {
+                    ConfigAPEEncodeError::SecondaryAggregationKeyLenTooLarge(key.len())
+                })?;
                 bits.extend(ShortVal::new(key_len).encode_ape());
                 bits.extend(BitVec::from_bytes(key));
             }
@@ -44,8 +45,9 @@ impl Config {
             Some(flame_config) => {
                 bits.push(true);
                 let flame_config_bytes = flame_config.to_bytes();
-                let flame_len = u32::try_from(flame_config_bytes.len())
-                    .map_err(|_| ConfigAPEEncodeError::FlameConfigLenTooLarge(flame_config_bytes.len()))?;
+                let flame_len = u32::try_from(flame_config_bytes.len()).map_err(|_| {
+                    ConfigAPEEncodeError::FlameConfigLenTooLarge(flame_config_bytes.len())
+                })?;
                 bits.extend(ShortVal::new(flame_len).encode_ape());
                 bits.extend(BitVec::from_bytes(&flame_config_bytes));
             }

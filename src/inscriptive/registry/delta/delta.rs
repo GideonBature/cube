@@ -23,20 +23,23 @@ type CallCounterDelta = u16;
 /// Activity timestamp.
 type ActivityTimestamp = u64;
 
+/// A pending account registration in the registry delta.
+type NewAccountRegistration = (
+    AccountKey,
+    ActivityTimestamp,
+    Option<AccountBLSKey>,
+    Option<AccountSecondaryAggregationKey>,
+    Option<AccountProjectorConfig>,
+    Option<FMAccountFlameConfig>,
+);
+
 /// A struct for containing ephemeral state differences to be applied for 'RegistryManager'.
 #[derive(Clone)]
 pub struct RMDelta {
     // ACCOUNT RELATED VALUES ///
     /// ------------------------------------------------------------
     // New accounts to register.
-    pub new_accounts_to_register: Vec<(
-        AccountKey,
-        ActivityTimestamp,
-        Option<AccountBLSKey>,
-        Option<AccountSecondaryAggregationKey>,
-        Option<AccountProjectorConfig>,
-        Option<FMAccountFlameConfig>,
-    )>,
+    pub new_accounts_to_register: Vec<NewAccountRegistration>,
 
     // Updated account call counters for a given account.
     pub updated_account_call_counters: HashMap<AccountKey, CallCounterDelta>,

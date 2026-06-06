@@ -194,7 +194,9 @@ impl Exemption {
 
         // 2 Subsidize the direct credit only if active.
         let direct_credit = match self.direct_credit {
-            Some((direct_credit, direct_expiry)) if current_timestamp <= direct_expiry => direct_credit,
+            Some((direct_credit, direct_expiry)) if current_timestamp <= direct_expiry => {
+                direct_credit
+            }
             _ => 0,
         };
 

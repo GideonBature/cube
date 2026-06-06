@@ -45,7 +45,7 @@ pub type GRAVEYARD = Arc<Mutex<Graveyard>>;
 impl Graveyard {
     pub fn new(chain: Chain) -> Result<GRAVEYARD, GraveyardConstructionError> {
         // 1 Open the graveyard db.
-        let graveyard_db_path = format!("storage/{}/graveyard", chain.to_string());
+        let graveyard_db_path = format!("storage/{}/graveyard", chain);
         let graveyard_db =
             sled::open(graveyard_db_path).map_err(GraveyardConstructionError::DBOpenError)?;
 
@@ -54,28 +54,25 @@ impl Graveyard {
             HashMap::<AccountKey, RedemptionAmountInSatoshis>::new();
 
         // 3 Iterate over all items in the graveyard db to collect the buried accounts.
-        for lookup in graveyard_db.iter() {
-            // 3.1 Get the key and value.
-            if let Ok((key, val)) = lookup {
-                // 3.1.1 Deserialize the account key.
-                let account_key: [u8; 32] = key.as_ref().try_into().map_err(|_| {
-                    GraveyardConstructionError::UnableToDeserializeAccountKeyBytesFromDBKey(
+        for (key, val) in graveyard_db.iter().flatten() {
+            // 3.1.1 Deserialize the account key.
+            let account_key: [u8; 32] = key.as_ref().try_into().map_err(|_| {
+                GraveyardConstructionError::UnableToDeserializeAccountKeyBytesFromDBKey(
+                    key.to_vec(),
+                )
+            })?;
+
+            // 3.1.2 Deserialize the coins redemption amount.
+            let redemption_amount: u64 =
+                u64::from_le_bytes(val.as_ref().try_into().map_err(|_| {
+                    GraveyardConstructionError::UnableToDeserializeRedemptionAmountBytesFromDBValue(
                         key.to_vec(),
+                        val.to_vec(),
                     )
-                })?;
+                })?);
 
-                // 3.1.2 Deserialize the coins redemption amount.
-                let redemption_amount: u64 =
-                    u64::from_le_bytes(val.as_ref().try_into().map_err(|_| {
-                        GraveyardConstructionError::UnableToDeserializeRedemptionAmountBytesFromDBValue(
-                            key.to_vec(),
-                            val.to_vec(),
-                        )
-                    })?);
-
-                // 3.1.3 Insert the buried account into the in-memory buried accounts.
-                in_memory_buried_accounts.insert(account_key, redemption_amount);
-            }
+            // 3.1.3 Insert the buried account into the in-memory buried accounts.
+            in_memory_buried_accounts.insert(account_key, redemption_amount);
         }
 
         // 4 Construct the graveyard.
@@ -159,9 +156,7 @@ impl Graveyard {
 
         // 2 Check if the account has already been permanently buried.
         if self.in_memory_buried_accounts.contains_key(&account_key) {
-            return Err(
-                GraveyardBuryAccountError::AccountIsAlreadyPermanentlyBuried(account_key),
-            );
+            return Err(GraveyardBuryAccountError::AccountIsAlreadyPermanentlyBuried(account_key));
         }
 
         // 3 Epheremally bury the account in the delta.
@@ -311,7 +306,7 @@ impl Graveyard {
 /// Erases the graveyard by db path.
 pub fn erase_graveyard(chain: Chain) {
     // Graveyard db path.
-    let graveyard_db_path = format!("storage/{}/graveyard", chain.to_string());
+    let graveyard_db_path = format!("storage/{}/graveyard", chain);
 
     // Erase the path.
     let _ = std::fs::remove_dir_all(graveyard_db_path);

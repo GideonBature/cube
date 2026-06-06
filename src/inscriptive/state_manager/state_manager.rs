@@ -43,7 +43,7 @@ impl StateManager {
     /// Constructs a fresh new 'StateManager'.
     pub fn new(chain: Chain) -> Result<STATE_MANAGER, SMConstructionError> {
         // 1 Open the states db.
-        let states_db_path = format!("storage/{}/states", chain.to_string());
+        let states_db_path = format!("storage/{}/states", chain);
         let states_db = sled::open(states_db_path).map_err(SMConstructionError::DBOpenError)?;
 
         // 2 Initialize the in-memory states.
@@ -174,10 +174,8 @@ impl StateManager {
         optimized: bool,
     ) -> Result<Option<StateValue>, SMInsertUpdateStateError> {
         // 1 If not optimized, check if the contract is registered.
-        if !optimized {
-            if !self.is_contract_registered(contract_id) {
-                return Err(SMInsertUpdateStateError::ContractNotRegistered(contract_id));
-            }
+        if !optimized && !self.is_contract_registered(contract_id) {
+            return Err(SMInsertUpdateStateError::ContractNotRegistered(contract_id));
         }
 
         // 2 Check if the value already exists.
@@ -192,7 +190,7 @@ impl StateManager {
                 );
 
                 // 2.a.2 Return the previous value for updated.
-                return Ok(Some(existing_value));
+                Ok(Some(existing_value))
             }
             // 2.b Insert the value.
             None => {
@@ -204,7 +202,7 @@ impl StateManager {
                 );
 
                 // 2.b.2 Return None for newly inserted.
-                return Ok(None);
+                Ok(None)
             }
         }
     }
@@ -219,14 +217,12 @@ impl StateManager {
         optimized: bool,
     ) -> Result<(), SMRemoveStateError> {
         // 1 If not optimized, check if the contract is registered.
-        if !optimized {
-            if !self.is_contract_registered(contract_id) {
-                return Err(SMRemoveStateError::ContractNotRegistered(contract_id));
-            }
+        if !optimized && !self.is_contract_registered(contract_id) {
+            return Err(SMRemoveStateError::ContractNotRegistered(contract_id));
         }
 
         // 2 Return error if the state does not exist.
-        if let None = self.get_state_value(contract_id, key) {
+        if self.get_state_value(contract_id, key).is_none() {
             return Err(SMRemoveStateError::StateDoesNotExist(
                 contract_id,
                 key.clone(),
@@ -256,7 +252,7 @@ impl StateManager {
                 // 1.1.1 Open the tree. This creates a new tree since it does not exist.
                 self.on_disk_states
                     .open_tree(contract_id)
-                    .map_err(|e| SMApplyChangesError::TreeOpenError(contract_id.clone(), e))?;
+                    .map_err(|e| SMApplyChangesError::TreeOpenError(*contract_id, e))?;
             }
 
             // 1.2 In-memory insertion.
@@ -266,7 +262,7 @@ impl StateManager {
 
                 // 1.2.2 Insert the contract state into the in-memory states.
                 self.in_memory_states
-                    .insert(contract_id.clone(), fresh_new_contract_state_holder);
+                    .insert(*contract_id, fresh_new_contract_state_holder);
             }
         }
 
@@ -278,14 +274,14 @@ impl StateManager {
                 let tree = self
                     .on_disk_states
                     .open_tree(contract_id)
-                    .map_err(|e| SMApplyChangesError::TreeOpenError(contract_id.clone(), e))?;
+                    .map_err(|e| SMApplyChangesError::TreeOpenError(*contract_id, e))?;
 
                 // 2.1.2 Insert the states into the tree.
                 for (ephemeral_state_key, ephemeral_state_value) in ephemeral_states.iter() {
                     tree.insert(ephemeral_state_key, ephemeral_state_value.clone())
                         .map_err(|e| {
                             SMApplyChangesError::TreeValueInsertError(
-                                contract_id.clone(),
+                                *contract_id,
                                 ephemeral_state_key.clone(),
                                 ephemeral_state_value.clone(),
                                 e,
@@ -298,7 +294,7 @@ impl StateManager {
             {
                 // 2.2.1 Get the mutable contract state holder from the in-memory states.
                 let mut_contract_state_holder = self.in_memory_states.get_mut(contract_id).ok_or(
-                    SMApplyChangesError::ContractIdNotFoundInMemory(contract_id.clone()),
+                    SMApplyChangesError::ContractIdNotFoundInMemory(*contract_id),
                 )?;
 
                 // 2.2.2 Insert the states into the contract state holder.
@@ -317,13 +313,13 @@ impl StateManager {
                 let tree = self
                     .on_disk_states
                     .open_tree(contract_id)
-                    .map_err(|e| SMApplyChangesError::TreeOpenError(contract_id.clone(), e))?;
+                    .map_err(|e| SMApplyChangesError::TreeOpenError(*contract_id, e))?;
 
                 // 3.1.2 Remove the states from the tree.
                 for state_key_to_remove in state_keys_to_remove.iter() {
                     tree.remove(state_key_to_remove).map_err(|e| {
                         SMApplyChangesError::TreeValueRemoveError(
-                            contract_id.clone(),
+                            *contract_id,
                             state_key_to_remove.clone(),
                             e,
                         )
@@ -384,7 +380,7 @@ impl StateManager {
 /// Erases the state manager by db path.
 pub fn erase_state_manager(chain: Chain) {
     // States db path.
-    let states_db_path = format!("storage/{}/states", chain.to_string());
+    let states_db_path = format!("storage/{}/states", chain);
 
     // Erase the path.
     let _ = std::fs::remove_dir_all(states_db_path);

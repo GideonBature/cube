@@ -55,10 +55,8 @@ impl SignedBatchTxn {
         engine_keyholder: &KeyHolder,
     ) -> Result<SignedBatchTxn, SignedBatchTxnConstructError> {
         // Prev projectors are not supported for the time being
-        {
-            if prev_projectors.len() != 0 {
-                return Err(SignedBatchTxnConstructError::PrevProjectorsNotSupportedError);
-            }
+        if !prev_projectors.is_empty() {
+            return Err(SignedBatchTxnConstructError::PrevProjectorsNotSupportedError);
         };
 
         let prev_payload_tx_input: (OutPoint, TxOut) = match prev_payload.location() {
@@ -72,7 +70,7 @@ impl SignedBatchTxn {
                 projector
                     .location
                     .as_ref()
-                    .map(|(outpoint, txout)| (outpoint.clone(), txout.clone()))
+                    .map(|(outpoint, txout)| (*outpoint, txout.clone()))
                     .ok_or(SignedBatchTxnConstructError::ProjectorLocationNotFoundError)
             })
             .collect::<Result<Vec<_>, _>>()?;
@@ -92,12 +90,9 @@ impl SignedBatchTxn {
             let mut swapout_tx_outputs = Vec::new();
             for entry in &entries {
                 if let Entry::Swapout(swapout) = entry {
-                    let scriptpubkey = swapout
-                        .pinless_self
-                        .calculated_scriptpubkey()
-                        .ok_or(
-                            SignedBatchTxnConstructError::SwapoutPinlessSelfCalculatedScriptpubkeyError,
-                        )?;
+                    let scriptpubkey = swapout.pinless_self.calculated_scriptpubkey().ok_or(
+                        SignedBatchTxnConstructError::SwapoutPinlessSelfCalculatedScriptpubkeyError,
+                    )?;
                     let txout = TxOut {
                         value: Amount::from_sat(u64::from(swapout.amount)),
                         script_pubkey: ScriptBuf::from(scriptpubkey),
@@ -234,7 +229,7 @@ impl SignedBatchTxn {
         let tx_inputs: Vec<(OutPoint, TxOut, Witness)> = unsigned_batch_txn
             .tx_inputs
             .into_iter()
-            .zip(tx_input_witnesses.into_iter())
+            .zip(tx_input_witnesses)
             .map(|((outpoint, txout), witness)| (outpoint, txout, witness))
             .collect();
 
@@ -248,7 +243,7 @@ impl SignedBatchTxn {
     pub fn tx_input_outpoints(&self) -> Vec<OutPoint> {
         self.tx_inputs
             .iter()
-            .map(|(outpoint, _, _)| outpoint.clone())
+            .map(|(outpoint, _, _)| *outpoint)
             .collect()
     }
 

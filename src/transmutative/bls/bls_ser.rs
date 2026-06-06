@@ -47,9 +47,7 @@ where
 }
 
 /// Helper function to deserialize [u8; 64] from a byte vector.
-pub fn deserialize_schnorr_signature<'de, D>(
-    deserializer: D,
-) -> Result<SchnorrSignature, D::Error>
+pub fn deserialize_schnorr_signature<'de, D>(deserializer: D) -> Result<SchnorrSignature, D::Error>
 where
     D: Deserializer<'de>,
 {

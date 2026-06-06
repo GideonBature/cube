@@ -19,8 +19,8 @@ impl CMContractBody {
     /// Constructs a fresh new contract body.
     pub fn new(balance: SatoshiAmount, shadow_space: ShadowSpace) -> Self {
         Self {
-            balance: balance,
-            shadow_space: shadow_space,
+            balance,
+            shadow_space,
         }
     }
 

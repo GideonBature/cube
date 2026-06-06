@@ -1,3 +1,5 @@
+use std::fmt;
+
 /// Chain type.
 #[derive(Debug, Copy, Clone, PartialEq)]
 pub enum Chain {
@@ -9,12 +11,12 @@ pub enum Chain {
     Mainnet,
 }
 
-impl ToString for Chain {
-    fn to_string(&self) -> String {
-        match self {
-            Chain::Testbed => "testbed".to_string(),
-            Chain::Signet => "signet".to_string(),
-            Chain::Mainnet => "mainnet".to_string(),
-        }
+impl fmt::Display for Chain {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(match self {
+            Chain::Testbed => "testbed",
+            Chain::Signet => "signet",
+            Chain::Mainnet => "mainnet",
+        })
     }
 }

@@ -42,7 +42,10 @@ pub async fn in_flight_batch_sync_background_task(
         {
             Ok((response_body, _)) => response_body,
             Err(error) => {
-                eprintln!("In-flight sync request failed: {:?}. Retrying in 5s...", error);
+                eprintln!(
+                    "In-flight sync request failed: {:?}. Retrying in 5s...",
+                    error
+                );
                 tokio::time::sleep(Duration::from_secs(5)).await;
                 continue;
             }

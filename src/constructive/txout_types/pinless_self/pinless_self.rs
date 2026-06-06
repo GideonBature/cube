@@ -65,6 +65,4 @@ impl PinlessSelf {
             PinlessSelf::Unknown(pinless_self_unknown) => pinless_self_unknown.json(),
         }
     }
-
 }
-

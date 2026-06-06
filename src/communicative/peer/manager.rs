@@ -30,7 +30,7 @@ impl PeerManager {
         chain: Chain,
         nns_client: &NNSClient,
         kind: PeerKind,
-        keys: &Vec<[u8; 32]>,
+        keys: &[[u8; 32]],
     ) -> Option<PEER_MANAGER> {
         let manager_ = PeerManager {
             chain,
@@ -81,10 +81,7 @@ impl PeerManager {
     }
 
     pub fn is_peer(&self, key: [u8; 32]) -> bool {
-        match self.retrieve_peer(key) {
-            Some(_) => return true,
-            None => return false,
-        }
+        self.retrieve_peer(key).is_some()
     }
 
     pub async fn peer_socket(&self, key: [u8; 32]) -> Option<SOCKET> {
@@ -104,22 +101,19 @@ impl PeerManager {
             _peer.connection()
         };
 
-        match conn {
-            Some(_) => return true,
-            None => return false,
-        }
+        conn.is_some()
     }
 }
 
 #[async_trait]
 pub trait PeerManagerExt {
-    async fn add_peers(&mut self, kind: PeerKind, keys: &Vec<[u8; 32]>) -> u64;
+    async fn add_peers(&mut self, kind: PeerKind, keys: &[[u8; 32]]) -> u64;
 }
 
 #[async_trait]
 impl PeerManagerExt for PEER_MANAGER {
     /// Tries to connect to a list of peers and returns the number of peers connected.
-    async fn add_peers(&mut self, kind: PeerKind, keys: &Vec<[u8; 32]>) -> u64 {
+    async fn add_peers(&mut self, kind: PeerKind, keys: &[[u8; 32]]) -> u64 {
         let chain = {
             let _self = self.lock().await;
             _self.chain()
@@ -138,8 +132,7 @@ impl PeerManagerExt for PEER_MANAGER {
             }
 
             let peer_list_ = Arc::clone(&peer_list_);
-            let kind = kind.clone();
-            let key = key.clone();
+            let key = *key;
             let nns_client = {
                 let _self = self.lock().await;
                 _self.nns_client.clone()

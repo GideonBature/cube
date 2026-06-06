@@ -62,9 +62,9 @@ impl OP_PUSHDATA {
             // Data might or might not be a minimal push.
             1 => {
                 // Check if the data is a minimal push.
-                match data.get(0) {
+                match data.first() {
                     // Should have been encoded as OP_0..OP_16.
-                    Some(value) if value >= &0 && value <= &16 => false,
+                    Some(value) if (&0..=&16).contains(&value) => false,
                     // Validation passes otherwise.
                     _ => true,
                 }

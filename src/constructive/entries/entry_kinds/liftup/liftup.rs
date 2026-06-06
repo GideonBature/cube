@@ -42,7 +42,10 @@ impl Liftup {
         let mut obj = Map::new();
 
         // 2 Insert the entry kind.
-        obj.insert("entry_kind".to_string(), Value::String("liftup".to_string()));
+        obj.insert(
+            "entry_kind".to_string(),
+            Value::String("liftup".to_string()),
+        );
 
         // 3 Insert the root account.
         obj.insert("account".to_string(), self.root_account.json());

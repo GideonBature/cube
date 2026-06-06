@@ -27,11 +27,8 @@ pub async fn request_move(
         .ok_or(RequestError::RequestSerializationError)?;
 
     // 3 Construct the request package.
-    let request_package = TCPPackage::new(
-        PackageKind::MoveProtocol,
-        Utc::now().timestamp(),
-        &payload,
-    );
+    let request_package =
+        TCPPackage::new(PackageKind::MoveProtocol, Utc::now().timestamp(), &payload);
 
     // 4 Send the request package.
     let socket: SOCKET = peer

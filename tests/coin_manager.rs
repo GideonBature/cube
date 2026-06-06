@@ -85,7 +85,7 @@ mod coin_manager_tests {
             let is_registered = _coin_manager.is_account_registered(ACCOUNT_KEY_1);
 
             // 5.5 The account should not be registered yet because changes are not applied yet.
-            assert_eq!(is_registered, false);
+            assert!(!is_registered);
 
             // 5.6 Apply the changes.
             let result = _coin_manager.apply_changes();
@@ -98,7 +98,7 @@ mod coin_manager_tests {
 
             // 5.11 Check if the account is registered.
             let is_registered = _coin_manager.is_account_registered(ACCOUNT_KEY_1);
-            assert_eq!(is_registered, true);
+            assert!(is_registered);
 
             // 5.12 Check if the account balance is 0.
             let account_balance = _coin_manager.get_account_balance(ACCOUNT_KEY_1);
@@ -196,7 +196,7 @@ mod coin_manager_tests {
 
             // 6.5 Check if the account is registered.
             let is_registered = _coin_manager.is_account_registered(ACCOUNT_KEY_2);
-            assert_eq!(is_registered, true);
+            assert!(is_registered);
 
             // 6.6 Check if the account balance is 500.
             let account_balance = _coin_manager.get_account_balance(ACCOUNT_KEY_2);
@@ -252,7 +252,7 @@ mod coin_manager_tests {
 
             // 7.5 Check if the account is registered.
             let is_registered = _coin_manager.is_account_registered(ACCOUNT_KEY_3);
-            assert_eq!(is_registered, true);
+            assert!(is_registered);
         }
 
         // 8 Register a contract.
@@ -266,7 +266,7 @@ mod coin_manager_tests {
 
             // 8.7 Check if the contract is registered. Should fail since changes are not applied yet.
             let is_registered = _coin_manager.is_contract_registered(CONTRACT_ID_1);
-            assert_eq!(is_registered, false);
+            assert!(!is_registered);
 
             // 8.8 Apply changes.
             let result = _coin_manager.apply_changes();
@@ -277,7 +277,7 @@ mod coin_manager_tests {
 
             // 8.10 Check if the contract is registered.
             let is_registered = _coin_manager.is_contract_registered(CONTRACT_ID_1);
-            assert_eq!(is_registered, true);
+            assert!(is_registered);
         }
 
         // 9 Contract balance updates.

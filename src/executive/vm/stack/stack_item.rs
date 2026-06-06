@@ -30,6 +30,11 @@ impl StackItem {
         self.0.len() as u32
     }
 
+    /// Returns whether the stack item is empty.
+    pub fn is_empty(&self) -> bool {
+        self.0.is_empty()
+    }
+
     /// Returns whether the stack item is false.
     pub fn is_false(&self) -> bool {
         self.0.is_empty()

@@ -10,10 +10,7 @@ impl MethodIndex {
     ///
     /// When `methods_len` exceeds 255, the index is written as a raw u16 (16 little-endian
     /// bits). Otherwise it is encoded as an [`AtomicVal`] with `methods_len` as the upper bound.
-    pub fn encode_ape(
-        &self,
-        methods_len: usize,
-    ) -> Result<BitVec, MethodIndexAPEEncodeError> {
+    pub fn encode_ape(&self, methods_len: usize) -> Result<BitVec, MethodIndexAPEEncodeError> {
         if methods_len > U8_METHOD_INDEX_UPPER_BOUND {
             Ok(BitVec::from_bytes(&self.index.to_le_bytes()))
         } else {

@@ -1,5 +1,5 @@
 use crate::constructive::bitcoiny::batch_txn::signed_batch_txn::signed_batch_txn::SignedBatchTxn;
-use bitcoin::{OutPoint, TxOut, hashes::Hash as _};
+use bitcoin::{hashes::Hash as _, OutPoint, TxOut};
 use serde::{Deserialize, Serialize};
 use serde_json::{Map, Value};
 

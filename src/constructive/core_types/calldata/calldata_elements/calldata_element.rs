@@ -37,13 +37,12 @@ impl CalldataElement {
                     });
                 }
             }
-            CalldataElement::Varbytes(bytes) => {
-                if bytes.len() > MAX_VARBYTES_LEN {
-                    return Err(CalldataElementValidationError::VarbytesLengthExceedsMax {
-                        len: bytes.len(),
-                    });
-                }
+            CalldataElement::Varbytes(bytes) if bytes.len() > MAX_VARBYTES_LEN => {
+                return Err(CalldataElementValidationError::VarbytesLengthExceedsMax {
+                    len: bytes.len(),
+                });
             }
+            CalldataElement::Varbytes(_) => {}
             _ => {}
         }
         Ok(())
@@ -85,10 +84,9 @@ impl CalldataElement {
                 let value_as_stack_uint = StackUint::from_u32(value_as_u32);
 
                 // Convert the value to a `StackItem`.
-                let value_as_stack_item = StackItem::from_stack_uint(value_as_stack_uint);
 
                 // Return the stack item.
-                value_as_stack_item
+                StackItem::from_stack_uint(value_as_stack_uint)
             }
             // 0-2 bytes in stack.
             CalldataElement::U16(value) => {
@@ -99,10 +97,9 @@ impl CalldataElement {
                 let value_as_stack_uint = StackUint::from_u32(value_as_u32);
 
                 // Convert the value to a `StackItem`.
-                let value_as_stack_item = StackItem::from_stack_uint(value_as_stack_uint);
 
                 // Return the stack item.
-                value_as_stack_item
+                StackItem::from_stack_uint(value_as_stack_uint)
             }
             // 0-4 bytes in stack.
             CalldataElement::U32(value) => {
@@ -110,10 +107,9 @@ impl CalldataElement {
                 let value_as_stack_uint = StackUint::from_u32(*value);
 
                 // Convert the value to a `StackItem`.
-                let value_as_stack_item = StackItem::from_stack_uint(value_as_stack_uint);
 
                 // Return the stack item.
-                value_as_stack_item
+                StackItem::from_stack_uint(value_as_stack_uint)
             }
             // 0-8 bytes in stack.
             CalldataElement::U64(value) => {
@@ -121,10 +117,9 @@ impl CalldataElement {
                 let value_as_stack_uint = StackUint::from_u64(*value);
 
                 // Convert the value to a `StackItem`.
-                let value_as_stack_item = StackItem::from_stack_uint(value_as_stack_uint);
 
                 // Return the stack item.
-                value_as_stack_item
+                StackItem::from_stack_uint(value_as_stack_uint)
             }
             // 0-1 bytes in stack.
             CalldataElement::Bool(value) => match value {
@@ -147,10 +142,9 @@ impl CalldataElement {
                 let value_as_stack_uint = StackUint::from_u32(*value);
 
                 // Convert the value to a `StackItem`.
-                let value_as_stack_item = StackItem::from_stack_uint(value_as_stack_uint);
 
                 // Return the stack item.
-                value_as_stack_item
+                StackItem::from_stack_uint(value_as_stack_uint)
             }
         }
     }

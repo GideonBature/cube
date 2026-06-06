@@ -19,8 +19,8 @@ impl Lift {
             // 2.a `Unknown` (`0x00`): shared body only (no v1/v2 script template).
             0x00 => {
                 let payload = &bytes[1..];
-                let (account_key, engine_key, outpoint, txout) = decode_lift_v1_sbe_body(payload)
-                    .map_err(LiftSBEDecodeError::LiftUnknown)?;
+                let (account_key, engine_key, outpoint, txout) =
+                    decode_lift_v1_sbe_body(payload).map_err(LiftSBEDecodeError::LiftUnknown)?;
                 Ok(Lift::Unknown {
                     account_key,
                     engine_key,

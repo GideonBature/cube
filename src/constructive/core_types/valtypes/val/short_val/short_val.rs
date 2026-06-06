@@ -85,7 +85,7 @@ impl ShortVal {
 /// Implement `Commonable` for `ShortVal`.
 impl Commonable for ShortVal {
     fn maybe_common_value(&self) -> MaybeCommonValue {
-        MaybeCommonValue::Short(self.clone())
+        MaybeCommonValue::Short(*self)
     }
 
     fn maybe_common_value_type() -> MaybeCommonValueType {

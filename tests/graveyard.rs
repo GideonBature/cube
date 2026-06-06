@@ -69,7 +69,7 @@ mod graveyard_tests {
             let _graveyard = graveyard.lock().await;
 
             // 6.2 Check if the account is buried.
-            assert_eq!(_graveyard.is_account_buried(ACCOUNT_KEY_1), true);
+            assert!(_graveyard.is_account_buried(ACCOUNT_KEY_1));
         }
 
         // 7 Retrieve the redemption amount for the account.
@@ -107,7 +107,7 @@ mod graveyard_tests {
             let _graveyard = graveyard.lock().await;
 
             // 9.2 Check if the account is buried.
-            assert_eq!(_graveyard.is_account_buried(ACCOUNT_KEY_2), true);
+            assert!(_graveyard.is_account_buried(ACCOUNT_KEY_2));
         }
 
         // 10 Retrieve the redemption amount for the account.
@@ -237,7 +237,7 @@ mod graveyard_tests {
             let _graveyard = graveyard.lock().await;
 
             // 18.2 Check if the account is buried.
-            assert_eq!(_graveyard.is_account_buried(ACCOUNT_KEY_3), true);
+            assert!(_graveyard.is_account_buried(ACCOUNT_KEY_3));
         }
 
         // 19 Retrieve the redemption amount for the account.

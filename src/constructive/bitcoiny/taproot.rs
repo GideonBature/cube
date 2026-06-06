@@ -161,11 +161,10 @@ impl TapRoot {
     }
 
     pub fn tap_branch(&self) -> [u8; 32] {
-        let uppermost_branch = match &self.tree {
+        match &self.tree {
             Some(tree) => tree.tap_branch(),
             None => [0x00u8; 32],
-        };
-        uppermost_branch
+        }
     }
 
     pub fn tap_tweak(&self) -> [u8; 32] {
@@ -176,7 +175,7 @@ impl TapRoot {
     }
 
     pub fn tweaked_key(&self) -> Option<Point> {
-        if let Some(_) = &self.tree {
+        if self.tree.is_some() {
             let tweak = Scalar::from_slice(&self.tap_tweak()).ok()?;
             let tweaked_key = self.inner_key_lifted() + tweak.base_point_mul();
 
@@ -249,17 +248,16 @@ impl TapTree {
     pub fn path(&self, index: usize) -> Vec<u8> {
         // Given leaf index return the merkle path
 
-        let path_vec = match tree_builder(&self.leaves, Some(index)).1 {
+        match tree_builder(&self.leaves, Some(index)).1 {
             Some(vec) => vec,
             None => panic!(),
-        };
-        path_vec
+        }
     }
 }
 
 // tree_builder returns given a vector of leaves, the tree root,
 // and optionally a merkle path corresponding to some leaf
-pub fn tree_builder(leaves: &Vec<TapLeaf>, index: Option<usize>) -> (Branch, Option<Vec<u8>>) {
+pub fn tree_builder(leaves: &[TapLeaf], index: Option<usize>) -> (Branch, Option<Vec<u8>>) {
     // Initialize path as empty
     let path: Vec<u8> = Vec::<u8>::new();
 
@@ -275,10 +273,7 @@ pub fn tree_builder(leaves: &Vec<TapLeaf>, index: Option<usize>) -> (Branch, Opt
         }
         _ => {
             let mut path: Vec<u8> = Vec::<u8>::new();
-            let mut lookup: Option<Branch> = match index.clone() {
-                Some(index) => Some(leaves[index].into_branch()),
-                None => None,
-            };
+            let mut lookup: Option<Branch> = index.map(|index| leaves[index].into_branch());
 
             // Number of TapTree levels is = log2(number of TapLeaves)
             let num_levels: u8 = (leaves.len() as f64).log2() as u8;
@@ -290,8 +285,8 @@ pub fn tree_builder(leaves: &Vec<TapLeaf>, index: Option<usize>) -> (Branch, Opt
             for level in 0..(num_levels + 1) {
                 // If it is the level zero, initialize current_level  with individual TapLeaves
                 if level == 0 {
-                    for i in 0..leaves.len() {
-                        current_level.push(leaves[i].clone().into_branch());
+                    for leaf in leaves.iter() {
+                        current_level.push(leaf.clone().into_branch());
                     }
                 } else {
                     // If it is the level one or above, move above_level items into current_level, and reset above_level
@@ -341,10 +336,10 @@ pub fn tree_builder(leaves: &Vec<TapLeaf>, index: Option<usize>) -> (Branch, Opt
 
                             // Lookup match?
                             let mut match_bool: bool = false;
-                            if &first_bytes == &lookup_bytes {
+                            if first_bytes == lookup_bytes {
                                 path.extend(&second_bytes);
                                 match_bool = true;
-                            } else if &second_bytes == &lookup_bytes {
+                            } else if second_bytes == lookup_bytes {
                                 path.extend(&first_bytes);
                                 match_bool = true;
                             }

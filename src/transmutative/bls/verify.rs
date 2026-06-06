@@ -60,10 +60,5 @@ pub fn bls_verify_aggregate(
         .collect::<Vec<Vec<u8>>>();
 
     // Verify the aggregate signature.
-    bls::aggregate_verify(
-        keys,
-        messages,
-        &aggregate_signature.to_vec(),
-        &message_tag,
-    )
+    bls::aggregate_verify(keys, messages, &aggregate_signature.to_vec(), &message_tag)
 }

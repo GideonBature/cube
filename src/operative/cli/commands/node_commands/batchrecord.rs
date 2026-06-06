@@ -6,19 +6,17 @@ use serde_json::to_string_pretty;
 // batchrecord
 pub async fn batchrecord_command(batch_height: u64, engine_peer: &PEER) {
     // 1 Request the batch record from the engine.
-    let (batchrecord_response_body, duration) = match engine_peer
-        .request_batchrecord(batch_height)
-        .await
-    {
-        Ok((body, duration)) => (body, duration),
-        Err(error) => {
-            println!(
-                "{}",
-                format!("Error requesting batch record: {:?}", error).red()
-            );
-            return;
-        }
-    };
+    let (batchrecord_response_body, duration) =
+        match engine_peer.request_batchrecord(batch_height).await {
+            Ok((body, duration)) => (body, duration),
+            Err(error) => {
+                println!(
+                    "{}",
+                    format!("Error requesting batch record: {:?}", error).red()
+                );
+                return;
+            }
+        };
 
     // 2 Match the batch record result (wire enum, not `Result`).
     match batchrecord_response_body {

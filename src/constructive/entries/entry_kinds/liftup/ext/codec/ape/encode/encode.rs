@@ -23,7 +23,7 @@ impl Liftup {
                 .root_account
                 .encode_ape(registry, encode_account_rank_as_longval)
                 .await
-                .map_err(|e| LiftupAPEEncodeError::RootAccountAPEEncodeError(e))?;
+                .map_err(LiftupAPEEncodeError::RootAccountAPEEncodeError)?;
 
             // 2.2 Extend the bit vector with the `RootAccount` bit vector.
             bits.extend(root_account_bits);
@@ -32,8 +32,10 @@ impl Liftup {
         // 3 Encode the `Target`.
         {
             // 3.1 Encode the `Target`.
-            let target_bits = self.target.encode_ape(execution_batch_height)
-                .map_err(|e| LiftupAPEEncodeError::TargetAPEEncodeError(e))?;
+            let target_bits = self
+                .target
+                .encode_ape(execution_batch_height)
+                .map_err(LiftupAPEEncodeError::TargetAPEEncodeError)?;
 
             // 3.2 Extend the bit vector with the `Target` bit vector.
             bits.extend(target_bits);

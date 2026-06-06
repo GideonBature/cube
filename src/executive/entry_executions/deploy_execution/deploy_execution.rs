@@ -3,6 +3,7 @@ use crate::constructive::entry::entry_fees::entry_fees::EntryFees;
 use crate::constructive::entry::entry_kinds::deploy::deploy::Deploy;
 use crate::executive::entry_executions::deploy_execution::error::deploy_execution_error::DeployExecutionError;
 use crate::executive::exec_ctx::exec_ctx::ExecCtx;
+use crate::executive::executable::compiler::compiler::ProgramCompiler;
 use crate::inscriptive::coin_manager::coin_manager::COIN_MANAGER;
 use crate::inscriptive::coin_manager::errors::balance_update_errors::CMAccountBalanceDownError;
 use crate::inscriptive::privileges_manager::bodies::contract_body::contract_body::PrivilegesManagerContractBody;
@@ -10,7 +11,6 @@ use crate::inscriptive::privileges_manager::elements::exemption::exemption::Exem
 use crate::inscriptive::privileges_manager::elements::exemption::exemption::ExemptionSubsidyBreakdown;
 use crate::inscriptive::privileges_manager::elements::liveness_flag::liveness_flag::LivenessFlag;
 use crate::inscriptive::privileges_manager::errors::update_error::PMUpdateAccountError;
-use crate::executive::executable::compiler::compiler::ProgramCompiler;
 
 impl ExecCtx {
     /// Executes a `Deploy` entry.
@@ -104,7 +104,7 @@ impl ExecCtx {
         let total_debit = fees_after_subsidy
             .checked_add(deploy.initial_balance as u64)
             .ok_or(DeployExecutionError::DeployFeeDebitOverflow)?;
-        
+
         decrease_account_balance_with_coin_manager(&self.coin_manager, account_key, total_debit)
             .await
             .map_err(DeployExecutionError::CoinManagerAccountBalanceDownError)?;

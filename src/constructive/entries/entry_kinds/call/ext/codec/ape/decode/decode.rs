@@ -1,3 +1,4 @@
+use crate::constructive::calldata::element::ape::decode::error::decode_errors::CalldataElementAPEDecodeError;
 use crate::constructive::calldata::element_type::CalldataElementType;
 use crate::constructive::core_types::calldata::calldata_elements::calldata_element::CalldataElement;
 use crate::constructive::core_types::method_index::method_index::MethodIndex;
@@ -6,9 +7,8 @@ use crate::constructive::core_types::ops_price::ops_price::OpsPrice;
 use crate::constructive::core_types::target::target::Target;
 use crate::constructive::entity::account::root_account::root_account::RootAccount;
 use crate::constructive::entity::contract::contract::Contract;
-use crate::constructive::calldata::element::ape::decode::error::decode_errors::CalldataElementAPEDecodeError;
-use crate::constructive::entry::entry_kinds::call::ext::codec::ape::decode::error::decode_error::CallEntryAPEDecodeError;
 use crate::constructive::entry::entry_kinds::call::call::Call;
+use crate::constructive::entry::entry_kinds::call::ext::codec::ape::decode::error::decode_error::CallEntryAPEDecodeError;
 use crate::constructive::valtype::val::short_val::short_val::ShortVal;
 use crate::inscriptive::registry::registry::REGISTRY;
 
@@ -22,13 +22,10 @@ impl Call {
         decode_contract_rank_as_longval: bool,
         registry: &REGISTRY,
     ) -> Result<Call, CallEntryAPEDecodeError> {
-        let account: RootAccount = RootAccount::decode_ape(
-            bit_stream,
-            decode_account_rank_as_longval,
-            registry,
-        )
-        .await
-        .map_err(CallEntryAPEDecodeError::AccountAPEDecodeError)?;
+        let account: RootAccount =
+            RootAccount::decode_ape(bit_stream, decode_account_rank_as_longval, registry)
+                .await
+                .map_err(CallEntryAPEDecodeError::AccountAPEDecodeError)?;
 
         let contract: Contract =
             Contract::decode_ape(bit_stream, registry, decode_contract_rank_as_longval)
@@ -58,10 +55,12 @@ impl Call {
                     contract_id,
                     method_index.index(),
                 )
-                .ok_or(CallEntryAPEDecodeError::UnableToRetrieveMethodArgTypesFromRegistry {
-                    contract_id,
-                    method_index: method_index.index(),
-                })?
+                .ok_or(
+                    CallEntryAPEDecodeError::UnableToRetrieveMethodArgTypesFromRegistry {
+                        contract_id,
+                        method_index: method_index.index(),
+                    },
+                )?
         };
 
         let calldata_count = ShortVal::decode_ape(bit_stream)
@@ -83,22 +82,16 @@ impl Call {
                 _ => false,
             };
 
-            let calldata_element = CalldataElement::decode_ape(
-                bit_stream,
-                arg_type,
-                registry,
-                decode_rank_as_longval,
-            )
-            .await
-            .map_err(CallEntryAPEDecodeError::CalldataElementAPEDecodeError)?;
+            let calldata_element =
+                CalldataElement::decode_ape(bit_stream, arg_type, registry, decode_rank_as_longval)
+                    .await
+                    .map_err(CallEntryAPEDecodeError::CalldataElementAPEDecodeError)?;
 
-            calldata_element
-                .validate()
-                .map_err(|e| {
-                    CallEntryAPEDecodeError::CalldataElementAPEDecodeError(
-                        CalldataElementAPEDecodeError::ValidationError(e),
-                    )
-                })?;
+            calldata_element.validate().map_err(|e| {
+                CallEntryAPEDecodeError::CalldataElementAPEDecodeError(
+                    CalldataElementAPEDecodeError::ValidationError(e),
+                )
+            })?;
 
             calldata_elements.push(calldata_element);
         }

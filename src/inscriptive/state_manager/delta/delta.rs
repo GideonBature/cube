@@ -105,7 +105,7 @@ impl SMDelta {
         // 2 Insert the state into the new or updated states.
         self.new_or_updated_contract_states
             .entry(contract_id)
-            .or_insert_with(HashMap::new)
+            .or_default()
             .insert(key.clone(), value.clone());
     }
 
@@ -128,7 +128,7 @@ impl SMDelta {
         // 2 Insert the key into the removed states.
         self.removed_contract_states
             .entry(contract_id)
-            .or_insert_with(Vec::new)
+            .or_default()
             .push(key.clone());
     }
 }

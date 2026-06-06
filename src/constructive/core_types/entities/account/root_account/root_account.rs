@@ -65,12 +65,11 @@ impl RootAccount {
                             );
 
                         // 5.a.1.a.2 Construct the `RootAccount`.
-                        let root_account = Self::RegisteredAndConfiguredRootAccount(
-                            registered_and_configured_root_account,
-                        );
 
                         // 5.a.1.a.3 Return the `RootAccount`.
-                        root_account
+                        Self::RegisteredAndConfiguredRootAccount(
+                            registered_and_configured_root_account,
+                        )
                     }
 
                     // 5.a.1.b The BLS key is not configured.
@@ -95,12 +94,11 @@ impl RootAccount {
                             );
 
                         // 5.a.1.b.3 Construct the `RootAccount`.
-                        let root_account = Self::RegisteredButUnconfiguredRootAccount(
-                            registered_but_unconfigured_root_account,
-                        );
 
                         // 5.a.1.b.4 Return the `RootAccount`.
-                        root_account
+                        Self::RegisteredButUnconfiguredRootAccount(
+                            registered_but_unconfigured_root_account,
+                        )
                     }
                 }
             }
@@ -125,10 +123,9 @@ impl RootAccount {
                 );
 
                 // 5.b.3 Construct the `RootAccount`.
-                let root_account = Self::UnregisteredRootAccount(unregistered_root_account);
 
                 // 5.b.4 Return the `RootAccount`.
-                root_account
+                Self::UnregisteredRootAccount(unregistered_root_account)
             }
         }
     }
@@ -253,10 +250,9 @@ pub fn bls_key_authorization_message(
     preimage.extend(flame_config_hash);
 
     // 6 Hash the preimage to get the message.
-    let message = preimage.hash(Some(HashTag::BLSKeyAuthorizationMessage));
 
     // 7 Return the message.
-    message
+    preimage.hash(Some(HashTag::BLSKeyAuthorizationMessage))
 }
 
 /// Verifies the BLS key authorization signature.

@@ -6,12 +6,9 @@ impl MethodIndex {
     ///
     /// The buffer must be exactly two bytes (little-endian `u16` index).
     pub fn decode_sbe(bytes: &[u8]) -> Result<MethodIndex, MethodIndexSBEDecodeError> {
-        let arr: [u8; 2] =
-            bytes
-                .try_into()
-                .map_err(|_| MethodIndexSBEDecodeError::MethodIndexSBEInvalidPayloadLength {
-                    got: bytes.len(),
-                })?;
+        let arr: [u8; 2] = bytes.try_into().map_err(|_| {
+            MethodIndexSBEDecodeError::MethodIndexSBEInvalidPayloadLength { got: bytes.len() }
+        })?;
 
         Ok(MethodIndex::new(u16::from_le_bytes(arr)))
     }

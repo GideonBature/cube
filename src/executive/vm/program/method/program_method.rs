@@ -1,7 +1,7 @@
 use super::{
     limits::{
         MAX_METHOD_ARG_COUNT, MAX_METHOD_NAME_LENGTH, MAX_METHOD_OPCODE_COUNT,
-        MIN_METHOD_ARG_COUNT, MIN_METHOD_NAME_LENGTH, MIN_METHOD_OPCODE_COUNT,
+        MIN_METHOD_NAME_LENGTH, MIN_METHOD_OPCODE_COUNT,
     },
     method_error::{MethodConstructionError, ScriptValidationError},
     method_type::MethodType,
@@ -47,7 +47,7 @@ impl ProgramMethod {
         }
 
         // Check arg count.
-        if arg_types.len() > MAX_METHOD_ARG_COUNT || arg_types.len() < MIN_METHOD_ARG_COUNT {
+        if arg_types.len() > MAX_METHOD_ARG_COUNT {
             return Err(MethodConstructionError::ArgCountError);
         }
 
@@ -101,15 +101,10 @@ impl ProgramMethod {
     /// Validates the script.
     pub fn validate_script(&self) -> Result<(), ScriptValidationError> {
         for opcode in self.script.iter() {
-            match opcode {
-                // Check for non minimal push data.
-                Opcode::OP_PUSHDATA(op_pushdata) => {
-                    if op_pushdata.0.len() == 1 && !OP_PUSHDATA::check_minimal_push(&op_pushdata.0)
-                    {
-                        return Err(ScriptValidationError::NonMinimalDataPushError);
-                    }
+            if let Opcode::OP_PUSHDATA(op_pushdata) = opcode {
+                if op_pushdata.0.len() == 1 && !OP_PUSHDATA::check_minimal_push(&op_pushdata.0) {
+                    return Err(ScriptValidationError::NonMinimalDataPushError);
                 }
-                _ => {}
             }
         }
 
@@ -117,7 +112,7 @@ impl ProgramMethod {
     }
 
     /// Matches the args to the arg types.
-    pub fn match_args(&self, args: &Vec<StackItem>) -> bool {
+    pub fn match_args(&self, args: &[StackItem]) -> bool {
         // Check if the number of args matches the number of arg types.
         if args.len() != self.arg_types.len() {
             return false;
@@ -189,28 +184,19 @@ impl ProgramMethod {
     }
 
     /// Get the payable allocation value.
-    pub fn payable_allocation_value(&self, args: &Vec<StackItem>) -> Option<u32> {
+    pub fn payable_allocation_value(&self, args: &[StackItem]) -> Option<u32> {
         // Get the payable arg value.
         for (index, arg_type) in self.arg_types.iter().enumerate() {
             // Check if the arg type is a payable.
             if *arg_type == CalldataElementType::Payable {
                 // Get the payable arg.
-                let payable_arg = match args.get(index) {
-                    Some(arg) => arg,
-                    None => return None,
-                };
+                let payable_arg = args.get(index)?;
 
                 // Convert the arg to a `StackUint`.
-                let payable_arg_as_stack_uint = match payable_arg.to_stack_uint() {
-                    Some(arg) => arg,
-                    None => return None,
-                };
+                let payable_arg_as_stack_uint = payable_arg.to_stack_uint()?;
 
                 // Convert the arg to a u32.
-                let payable_arg_as_u32 = match payable_arg_as_stack_uint.to_u32() {
-                    Some(arg) => arg,
-                    None => return None,
-                };
+                let payable_arg_as_u32 = payable_arg_as_stack_uint.to_u32()?;
 
                 // Return the arg value.
                 return Some(payable_arg_as_u32);

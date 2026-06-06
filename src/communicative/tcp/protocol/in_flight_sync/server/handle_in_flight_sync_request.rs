@@ -69,8 +69,11 @@ pub async fn handle_in_flight_sync_request(
     let response_bytes = response_body.serialize().unwrap_or_default();
 
     // 4 Construct the response package.
-    let response_package =
-        TCPPackage::new(PackageKind::InFlightSyncProtocol, timestamp, &response_bytes);
+    let response_package = TCPPackage::new(
+        PackageKind::InFlightSyncProtocol,
+        timestamp,
+        &response_bytes,
+    );
 
     // 5 Return the response package.
     Some(response_package)

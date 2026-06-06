@@ -29,14 +29,11 @@ impl FMDelta {
     }
 
     /// Epheremally registers an account in the delta.
-    pub fn ephemerally_register_account(
-        &mut self,
-        account_key: AccountKey,
-    ) -> bool {
+    pub fn ephemerally_register_account(&mut self, account_key: AccountKey) -> bool {
         // 1 Check if the account has just been ephemerally registered in the delta.
         match self.is_account_ephemerally_registered(account_key) {
             // 1.a The account has just been ephemerally registered in the delta.
-            true => return false,
+            true => false,
 
             // 1.b The account has not just been ephemerally registered in the delta.
             false => {

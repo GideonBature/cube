@@ -1,5 +1,5 @@
-use crate::constructive::entry::entry_kinds::call::ext::codec::ape::encode::error::encode_error::CallAPEEncodeError;
 use crate::constructive::entry::entry_kinds::call::call::Call;
+use crate::constructive::entry::entry_kinds::call::ext::codec::ape::encode::error::encode_error::CallAPEEncodeError;
 use crate::constructive::valtype::val::short_val::short_val::ShortVal;
 use crate::inscriptive::registry::registry::REGISTRY;
 use bit_vec::BitVec;
@@ -36,9 +36,9 @@ impl Call {
             let _registry = registry.lock().await;
             _registry
                 .get_contract_methods_len_by_contract_id(contract_id)
-                .ok_or(CallAPEEncodeError::UnableToRetrieveContractMethodsLenFromRegistry(
-                    contract_id,
-                ))?
+                .ok_or(
+                    CallAPEEncodeError::UnableToRetrieveContractMethodsLenFromRegistry(contract_id),
+                )?
         };
 
         bits.extend(
@@ -54,10 +54,12 @@ impl Call {
                     contract_id,
                     self.method_index.index(),
                 )
-                .ok_or(CallAPEEncodeError::UnableToRetrieveMethodArgTypesFromRegistry {
-                    contract_id,
-                    method_index: self.method_index.index(),
-                })?
+                .ok_or(
+                    CallAPEEncodeError::UnableToRetrieveMethodArgTypesFromRegistry {
+                        contract_id,
+                        method_index: self.method_index.index(),
+                    },
+                )?
         };
 
         if self.calldata_elements.len() != arg_types.len() {
@@ -67,9 +69,7 @@ impl Call {
             });
         }
 
-        bits.extend(
-            ShortVal::new(self.calldata_elements.len() as u32).encode_ape(),
-        );
+        bits.extend(ShortVal::new(self.calldata_elements.len() as u32).encode_ape());
 
         for calldata_element in self.calldata_elements.iter() {
             calldata_element

@@ -24,10 +24,7 @@ pub async fn config_command(
     engine_peer: &PEER,
 ) {
     if secondary_aggregation_key.is_none() && projector_config.is_none() && flame_config.is_none() {
-        println!(
-            "{}",
-            "Error: provide at least one of sak, pc, fc.".red()
-        );
+        println!("{}", "Error: provide at least one of sak, pc, fc.".red());
         return;
     }
 
@@ -58,7 +55,11 @@ pub async fn config_command(
         .as_ref()
         .map(|v| v.len() as u64)
         .unwrap_or(0)
-        + if config.projector_config.is_some() { 32 } else { 0 }
+        + if config.projector_config.is_some() {
+            32
+        } else {
+            0
+        }
         + config
             .flame_config
             .as_ref()

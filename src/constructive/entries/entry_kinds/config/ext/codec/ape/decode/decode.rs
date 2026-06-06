@@ -15,9 +15,10 @@ impl Config {
         decode_account_rank_as_longval: bool,
         registry: &REGISTRY,
     ) -> Result<Config, ConfigAPEDecodeError> {
-        let root_account = RootAccount::decode_ape(bit_stream, decode_account_rank_as_longval, registry)
-            .await
-            .map_err(ConfigAPEDecodeError::RootAccountAPEDecodeError)?;
+        let root_account =
+            RootAccount::decode_ape(bit_stream, decode_account_rank_as_longval, registry)
+                .await
+                .map_err(ConfigAPEDecodeError::RootAccountAPEDecodeError)?;
 
         let secondary_aggregation_key_present = bit_stream
             .next()

@@ -12,7 +12,9 @@ fn decode_lift_v2_sbe_body(
 
     // 1 Decode the 32-byte Schnorr account key.
     if total < 32 {
-        return Err(LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForAccountKey { got_total: total });
+        return Err(
+            LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForAccountKey { got_total: total },
+        );
     }
     let (account_slice, rest) = payload.split_at(32);
     let account_key = account_slice
@@ -21,7 +23,11 @@ fn decode_lift_v2_sbe_body(
 
     // 2 Decode the 32-byte Schnorr engine key.
     if rest.len() < 32 {
-        return Err(LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForEngineKey { got_total: rest.len() });
+        return Err(
+            LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForEngineKey {
+                got_total: rest.len(),
+            },
+        );
     }
     let (engine_slice, rest) = rest.split_at(32);
     let engine_key = engine_slice
@@ -30,7 +36,11 @@ fn decode_lift_v2_sbe_body(
 
     // 3 Decode the 36-byte outpoint (`OutpointExt::from_bytes36`).
     if rest.len() < 36 {
-        return Err(LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForOutPoint { got_total: rest.len() });
+        return Err(
+            LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForOutPoint {
+                got_total: rest.len(),
+            },
+        );
     }
     let (outpoint_slice, rest) = rest.split_at(36);
     let outpoint_bytes: [u8; 36] = outpoint_slice
@@ -41,23 +51,31 @@ fn decode_lift_v2_sbe_body(
 
     // 4 Decode the `TxOut` prefix: 8-byte little-endian value.
     if rest.len() < 8 {
-        return Err(LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForTxOutValue { got_total: rest.len() });
+        return Err(
+            LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForTxOutValue {
+                got_total: rest.len(),
+            },
+        );
     }
     let (value_slice, rest) = rest.split_at(8);
 
     // 5 Read the 1-byte script-pubkey length prefix and the script bytes.
     if rest.is_empty() {
         return Err(
-            LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForTxOutScriptLengthPrefix { got_total: 0 },
+            LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForTxOutScriptLengthPrefix {
+                got_total: 0,
+            },
         );
     }
     let script_len = rest[0] as usize;
     let rest = &rest[1..];
     if rest.len() < script_len {
-        return Err(LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForTxOutScriptPayload {
-            got_total: rest.len(),
-            script_len,
-        });
+        return Err(
+            LiftV2SBEDecodeError::LiftV2SBEInsufficientBytesForTxOutScriptPayload {
+                got_total: rest.len(),
+                script_len,
+            },
+        );
     }
     let (script_slice, trailing) = rest.split_at(script_len);
 
@@ -66,8 +84,8 @@ fn decode_lift_v2_sbe_body(
     txout_bytes.extend_from_slice(value_slice);
     txout_bytes.push(script_len as u8);
     txout_bytes.extend_from_slice(script_slice);
-    let txout =
-        TxOut::from_bytes(&txout_bytes).ok_or(LiftV2SBEDecodeError::LiftV2SBEFailedToDecodeTxOutError)?;
+    let txout = TxOut::from_bytes(&txout_bytes)
+        .ok_or(LiftV2SBEDecodeError::LiftV2SBEFailedToDecodeTxOutError)?;
 
     // 7 Ensure no bytes trail after the encoded `TxOut`.
     if !trailing.is_empty() {
@@ -93,7 +111,9 @@ impl LiftV2 {
         // 2 Split the discriminant from the payload and verify it is `0x02`.
         let (tag, payload) = bytes.split_at(1);
         if tag[0] != 0x02 {
-            return Err(LiftV2SBEDecodeError::LiftV2SBEExpectedVariantDiscriminant0x02Error { got: tag[0] });
+            return Err(
+                LiftV2SBEDecodeError::LiftV2SBEExpectedVariantDiscriminant0x02Error { got: tag[0] },
+            );
         }
 
         // 3 Decode the payload body (keys, outpoint, `TxOut`).

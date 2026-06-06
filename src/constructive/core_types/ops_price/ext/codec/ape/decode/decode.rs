@@ -26,12 +26,12 @@ impl OpsPrice {
             .map_err(OpsPriceAPEDecodeError::LongValAPEDecodeError)?
             .value();
 
-        let ops_price_ppm = base_ops_price
-            .checked_add(overhead)
-            .ok_or(OpsPriceAPEDecodeError::OpsPriceTotalOverflow {
+        let ops_price_ppm = base_ops_price.checked_add(overhead).ok_or(
+            OpsPriceAPEDecodeError::OpsPriceTotalOverflow {
                 base_ops_price,
                 overhead,
-            })?;
+            },
+        )?;
 
         Ok(OpsPrice::new(ops_price_ppm))
     }

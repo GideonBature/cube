@@ -155,7 +155,7 @@ impl IntoPoint for Vec<u8> {
                 let ba = bytes
                     .into_byte_array_32()
                     .map_err(|_| SecpError::InvalidPoint)?;
-                return ba.into_point();
+                ba.into_point()
             }
             33 => {
                 let mut bytes = Vec::<u8>::with_capacity(33);
@@ -164,9 +164,9 @@ impl IntoPoint for Vec<u8> {
                 let ba = bytes
                     .into_byte_array_33()
                     .map_err(|_| SecpError::InvalidPoint)?;
-                return ba.into_point();
+                ba.into_point()
             }
-            _ => return Err(SecpError::InvalidPoint),
+            _ => Err(SecpError::InvalidPoint),
         }
     }
 }
@@ -190,8 +190,8 @@ impl IntoScalar for [u8; 32] {
     }
 
     fn into_reduced_scalar(&self) -> Result<Scalar, SecpError> {
-        let scalar = match MaybeScalar::reduce_from(&self) {
-            MaybeScalar::Zero => Scalar::reduce_from(&self),
+        let scalar = match MaybeScalar::reduce_from(self) {
+            MaybeScalar::Zero => Scalar::reduce_from(self),
             MaybeScalar::Valid(point) => point,
         };
 
@@ -240,10 +240,7 @@ impl IntoSigTuple for [u8; 64] {
             Err(_) => return None,
         };
 
-        let public_nonce_point = match public_nonce.to_even_point() {
-            Some(public_nonce_point_) => public_nonce_point_,
-            None => return None,
-        };
+        let public_nonce_point = public_nonce.to_even_point()?;
 
         let s_commitment: [u8; 32] = match self[32..].try_into() {
             Ok(bytes) => bytes,

@@ -63,7 +63,7 @@ impl Flame {
         // 1 Decode the flame tier.
         let (flame_tier, remaining_bytes) = {
             // 1.1 Check if there are enough bytes for the flame tier length (1 byte).
-            if bytes.len() < 1 {
+            if bytes.is_empty() {
                 return None;
             }
 

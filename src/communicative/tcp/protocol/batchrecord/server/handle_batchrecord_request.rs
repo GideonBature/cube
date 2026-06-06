@@ -10,9 +10,8 @@ pub async fn handle_batchrecord_request(
     archival_manager: &Option<ARCHIVAL_MANAGER>,
 ) -> Option<TCPPackage> {
     // 1 Deserialize the request body.
-    let BatchRecordRequestBody { batch_height } = match BatchRecordRequestBody::deserialize(
-        payload,
-    ) {
+    let BatchRecordRequestBody { batch_height } = match BatchRecordRequestBody::deserialize(payload)
+    {
         Some(req) => req,
         None => {
             let body = BatchRecordResponseBody::err(
@@ -29,7 +28,9 @@ pub async fn handle_batchrecord_request(
 
     // 2 Resolve the batch record from the archival manager (if configured).
     let response_body = match archival_manager {
-        None => BatchRecordResponseBody::err(BatchRecordResponseError::ArchivalManagerUnavailableError),
+        None => {
+            BatchRecordResponseBody::err(BatchRecordResponseError::ArchivalManagerUnavailableError)
+        }
         Some(archival_manager) => {
             let _archival_manager = archival_manager.lock().await;
             let batch_record = _archival_manager.batch_record_by_height(batch_height);

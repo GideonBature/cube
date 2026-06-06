@@ -50,7 +50,7 @@ impl LiftV2 {
         let self_scriptpubkey = self.txout.script_pubkey.as_bytes();
 
         // 3 Validate the scriptpubkeys.
-        if &calculated_scriptpubkey != self_scriptpubkey {
+        if calculated_scriptpubkey != self_scriptpubkey {
             return false;
         }
 
@@ -124,14 +124,10 @@ impl LiftV2 {
 /// Returns a taproot for the LiftV2 struct.
 pub fn return_liftv2_taproot(account_key: [u8; 32], engine_key: [u8; 32]) -> Option<TapRoot> {
     // 1 Construct the keys
-    let keys: Vec<Point> = {
-        let mut keys = Vec::<Point>::new();
-
-        keys.push(account_key.into_point().unwrap());
-        keys.push(engine_key.into_point().unwrap());
-
-        keys
-    };
+    let keys: Vec<Point> = vec![
+        account_key.into_point().unwrap(),
+        engine_key.into_point().unwrap(),
+    ];
 
     // 2 Construct the key aggregation context
     let key_agg_ctx = MusigKeyAggCtx::new(&keys, None)?;

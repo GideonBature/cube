@@ -4,7 +4,8 @@ use crate::executive::{
         compiler::compiler::ProgramCompiler,
         executable::Program,
         method::{
-            compiler::compiler::MethodCompiler, method_type::MethodType, program_method::ProgramMethod,
+            compiler::compiler::MethodCompiler, method_type::MethodType,
+            program_method::ProgramMethod,
         },
     },
     opcode::{compiler::compiler::OpcodeCompiler, opcode::Opcode},
@@ -127,9 +128,9 @@ fn comp_program(parts: Vec<&str>) {
     println!("0x{}", hex::encode(compiled));
 }
 
-fn parse_comp_program_arguments<'a>(
-    parts: &'a Vec<&'a str>,
-) -> Option<(String, Option<Vec<u8>>, usize, &'a [&'a str])> {
+type CompProgramArguments<'a> = (String, Option<Vec<u8>>, usize, &'a [&'a str]);
+
+fn parse_comp_program_arguments<'a>(parts: &'a [&'a str]) -> Option<CompProgramArguments<'a>> {
     // Expected minimum:
     // comp program <program_name> <metadata> <num_methods>
     if parts.len() < 5 {
@@ -171,7 +172,10 @@ fn parse_comp_program_arguments<'a>(
         }
 
         // Validate all method hex blobs up front for better argument disambiguation.
-        if method_bytes_args.iter().any(|m| parse_hex_bytes(m).is_none()) {
+        if method_bytes_args
+            .iter()
+            .any(|m| parse_hex_bytes(m).is_none())
+        {
             continue;
         }
 

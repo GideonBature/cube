@@ -130,7 +130,7 @@ pub async fn engine_batch_builder_background_task(
             // 9.1 Try to get the batch container.
             let batch_container_result = {
                 let mut _session_pool = session_pool.lock().await;
-                _session_pool.into_batch_container(&engine_keyholder).await
+                _session_pool.into_batch_container(engine_keyholder).await
             };
 
             // 9.2 Match the batch container result.

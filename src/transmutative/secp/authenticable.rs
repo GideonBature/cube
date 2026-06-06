@@ -38,10 +38,7 @@ where
 
     /// Serialize the authenticable object.
     pub fn serialize(&self) -> Vec<u8> {
-        match serde_json::to_vec(self) {
-            Ok(bytes) => bytes,
-            Err(_) => vec![],
-        }
+        serde_json::to_vec(self).unwrap_or_default()
     }
 
     /// Get the object.

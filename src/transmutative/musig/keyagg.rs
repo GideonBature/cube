@@ -13,7 +13,7 @@ pub struct MusigKeyAggCtx {
 }
 
 impl MusigKeyAggCtx {
-    pub fn new(keys: &Vec<Point>, tweak: Option<Scalar>) -> Option<Self> {
+    pub fn new(keys: &[Point], tweak: Option<Scalar>) -> Option<Self> {
         let keys = sort_keys(keys);
         let key_coefs = key_coefs(&keys)?;
         let agg_inner_key = key_agg(&keys, &key_coefs)?;
@@ -25,7 +25,7 @@ impl MusigKeyAggCtx {
                     MaybePoint::Infinity => return None,
                 }
             }
-            None => agg_inner_key.clone(),
+            None => agg_inner_key,
         };
 
         let ctx = MusigKeyAggCtx {
@@ -48,15 +48,15 @@ impl MusigKeyAggCtx {
     }
 
     pub fn agg_inner_key(&self) -> Point {
-        self.agg_inner_key.clone()
+        self.agg_inner_key
     }
 
     pub fn tweak(&self) -> Option<Scalar> {
-        self.tweak.clone()
+        self.tweak
     }
 
     pub fn agg_key(&self) -> Point {
-        self.agg_key.clone()
+        self.agg_key
     }
 
     pub fn key_index(&self, key: Point) -> Option<usize> {
@@ -70,19 +70,19 @@ impl MusigKeyAggCtx {
     }
 }
 
-fn sort_keys(keys: &Vec<Point>) -> Vec<Point> {
-    let mut keys = keys.clone();
+fn sort_keys(keys: &[Point]) -> Vec<Point> {
+    let mut keys = keys.to_owned();
     keys.sort();
     keys
 }
 
-fn get_second_key(keys: &Vec<Point>) -> Option<Point> {
+fn get_second_key(keys: &[Point]) -> Option<Point> {
     let second_key = keys.get(1)?;
 
     Some(second_key.to_owned())
 }
 
-fn hash_keys(keys: &Vec<Point>) -> Option<[u8; 32]> {
+fn hash_keys(keys: &[Point]) -> Option<[u8; 32]> {
     let mut preimage = Vec::<u8>::with_capacity(keys.len() * 33);
 
     for key in keys {
@@ -94,7 +94,7 @@ fn hash_keys(keys: &Vec<Point>) -> Option<[u8; 32]> {
     Some(hash)
 }
 
-fn keyagg_coef_internal(keys: &Vec<Point>, key: Point, second_key: Point) -> Option<Scalar> {
+fn keyagg_coef_internal(keys: &[Point], key: Point, second_key: Point) -> Option<Scalar> {
     let coef = match key == second_key {
         true => Scalar::one(),
         false => {
@@ -114,8 +114,8 @@ fn keyagg_coef_internal(keys: &Vec<Point>, key: Point, second_key: Point) -> Opt
     Some(coef)
 }
 
-fn key_coefs(keys: &Vec<Point>) -> Option<Vec<Scalar>> {
-    let second_key = get_second_key(&keys)?;
+fn key_coefs(keys: &[Point]) -> Option<Vec<Scalar>> {
+    let second_key = get_second_key(keys)?;
 
     let mut coefs = Vec::<Scalar>::with_capacity(keys.len());
 
@@ -127,7 +127,7 @@ fn key_coefs(keys: &Vec<Point>) -> Option<Vec<Scalar>> {
     Some(coefs)
 }
 
-fn key_agg(keys: &Vec<Point>, key_coefs: &Vec<Scalar>) -> Option<Point> {
+fn key_agg(keys: &[Point], key_coefs: &[Scalar]) -> Option<Point> {
     if keys.len() != key_coefs.len() {
         return None;
     };
@@ -136,7 +136,7 @@ fn key_agg(keys: &Vec<Point>, key_coefs: &Vec<Scalar>) -> Option<Point> {
 
     for (index, key) in keys.iter().enumerate() {
         let key_coef = key_coefs[index];
-        agg_key = agg_key + (key.to_owned() * key_coef);
+        agg_key += key.to_owned() * key_coef;
     }
 
     let agg_key = match agg_key {

@@ -1,13 +1,12 @@
 use crate::{
     constructive::entry::entry_kinds::call::call::Call,
     executive::{
-        vm::program_execution::{caller::Caller, exec::execute, exec_error::ExecutionError},
         stack::stack_item::StackItem,
+        vm::program_execution::{caller::Caller, exec::execute, exec_error::ExecutionError},
     },
     inscriptive::{
         coin_manager::coin_manager::COIN_MANAGER, params_manager::params_manager::PARAMS_MANAGER,
-        registry::registry::REGISTRY,
-        state_manager::state_manager::STATE_MANAGER,
+        registry::registry::REGISTRY, state_manager::state_manager::STATE_MANAGER,
     },
 };
 use std::sync::Arc;
@@ -85,10 +84,7 @@ impl ProgramExecCtx {
         let timestamp = self.timestamp;
 
         // The ops budget is the ops budget of the call.
-        let ops_budget = match call.ops_budget() {
-            Some(ops_budget) => ops_budget,
-            None => 0,
-        };
+        let ops_budget = call.ops_budget().unwrap_or_default();
 
         // Check if the base ops price is the same as the base ops price of the call.
         if call.ops_price_total() != self.base_ops_price {
@@ -192,7 +188,7 @@ impl ProgramExecCtx {
                 }
 
                 // Return the error.
-                return Err(error);
+                Err(error)
             }
         }
     }

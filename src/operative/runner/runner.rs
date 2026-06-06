@@ -17,8 +17,8 @@ use crate::inscriptive::flame_manager::flame_manager::FlameManager;
 use crate::inscriptive::flame_manager::flame_manager::FLAME_MANAGER;
 use crate::inscriptive::graveyard::graveyard::Graveyard;
 use crate::inscriptive::graveyard::graveyard::GRAVEYARD;
-use crate::inscriptive::params_manager::params_manager::PARAMS_MANAGER;
 use crate::inscriptive::params_manager::params_manager::ParamsManager;
+use crate::inscriptive::params_manager::params_manager::PARAMS_MANAGER;
 use crate::inscriptive::privileges_manager::privileges_manager::PrivilegesManager;
 use crate::inscriptive::privileges_manager::privileges_manager::PRIVILEGES_MANAGER;
 use crate::inscriptive::registry::registry::Registry;
@@ -69,10 +69,10 @@ pub async fn run(
     // 3 Print the initializing message according to the operating kind.
     match operating_kind {
         OperatingKind::Engine => {
-            println!("{}", "Initializing engine.");
+            println!("Initializing engine.");
         }
         OperatingKind::Node => {
-            println!("{}", "Initializing node.");
+            println!("Initializing node.");
         }
     }
 
@@ -200,10 +200,8 @@ pub async fn run(
 
     // 8 Spawn chain syncer to sync Bitcoin blocks.
     {
-        let chain = chain.clone();
         let rpc_holder = rpc_holder.clone();
         let engine_conn = pre_sync_engine_conn.clone();
-        let engine_key = engine_key;
         let registry = Arc::clone(&registry);
         let graveyard = Arc::clone(&graveyard);
         let coin_manager = Arc::clone(&coin_manager);
@@ -237,12 +235,12 @@ pub async fn run(
 
     // 9 Initial Block Download (IBD) encapsulation.
     {
-        println!("{}", "Syncing chain.");
+        println!("Syncing chain.");
 
         // #9 Await chain to be fully synced.
         sync_manager.await_ibd().await;
 
-        println!("{}", "Syncing complete.");
+        println!("Syncing complete.");
     }
 
     // 11 Operating-kind-specific initializations.
@@ -256,18 +254,17 @@ pub async fn run(
             }
 
             // 11.a.2 Open port 6272 for incoming connections.
-            match open_port(chain).await {
-                true => println!(
+            if open_port(chain).await {
+                println!(
                     "{}",
                     format!("Opened port '{}'.", port_number(chain)).green()
-                ),
-                false => (),
+                )
             }
 
             // 11.a.3 Run NNS server in the background.
             {
                 let nns_client = nns_client.clone();
-                let _ = tokio::spawn(async move {
+                tokio::spawn(async move {
                     let _ = nns::server::run(&nns_client, operating_kind).await;
                 });
             }
@@ -292,7 +289,6 @@ pub async fn run(
                 let session_pool = Arc::clone(&session_pool);
                 let sync_manager = Arc::clone(&sync_manager);
                 let rpc_holder = rpc_holder.clone();
-                let engine_key = engine_key.clone();
                 let utxo_set = Arc::clone(&utxo_set);
                 let registry = Arc::clone(&registry);
                 let graveyard = Arc::clone(&graveyard);
@@ -304,7 +300,7 @@ pub async fn run(
                 let archival_manager = archival_manager.clone();
                 let key_holder = Arc::clone(&key_holder);
 
-                let _ = tokio::spawn(async move {
+                tokio::spawn(async move {
                     let _ = engine_batch_builder_background_task(
                         &session_pool,
                         &sync_manager,
@@ -328,9 +324,8 @@ pub async fn run(
             // 11.a.6 Run the TCP server in the background.
             {
                 let keys = Arc::clone(&key_holder);
-                let chain = chain.clone();
                 let session_pool = Arc::clone(&session_pool);
-                let _ = tokio::spawn(async move {
+                tokio::spawn(async move {
                     tcp_server::server::run(operating_kind, chain, keys, &session_pool).await;
                 });
             }

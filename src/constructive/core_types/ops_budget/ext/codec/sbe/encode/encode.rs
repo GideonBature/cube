@@ -1,5 +1,7 @@
 use crate::constructive::core_types::ops_budget::ops_budget::OpsBudget;
-use crate::constructive::core_types::valtypes::val::short_val::short_val::{ShortVal, ShortValTier};
+use crate::constructive::core_types::valtypes::val::short_val::short_val::{
+    ShortVal, ShortValTier,
+};
 
 type Bytes = Vec<u8>;
 

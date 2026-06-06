@@ -1,6 +1,6 @@
-use crate::communicative::tcp::protocol::batchrecord::BatchRecordResponseBody;
 use crate::communicative::tcp::protocol::batchcontainer::BatchContainerResponseBody;
 use crate::communicative::tcp::protocol::batchcontainer_by_prevoutpoint::BatchContainerByPrevOutpointResponseBody;
+use crate::communicative::tcp::protocol::batchrecord::BatchRecordResponseBody;
 use crate::communicative::tcp::protocol::config::ConfigResponseBody;
 use crate::communicative::tcp::protocol::deploy::DeployResponseBody;
 use crate::communicative::tcp::protocol::in_flight_sync::InFlightSyncResponseBody;

@@ -40,7 +40,10 @@ impl Config {
     /// Returns the config entry as a JSON object.
     pub fn json(&self) -> Value {
         let mut obj = Map::new();
-        obj.insert("entry_kind".to_string(), Value::String("config".to_string()));
+        obj.insert(
+            "entry_kind".to_string(),
+            Value::String("config".to_string()),
+        );
         obj.insert("root_account".to_string(), self.root_account.json());
         obj.insert(
             "secondary_aggregation_key".to_string(),

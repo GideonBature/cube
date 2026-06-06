@@ -32,7 +32,7 @@ pub type SYNC_MANAGER = Arc<Mutex<SyncManager>>;
 impl SyncManager {
     pub fn new(chain: Chain) -> Result<SYNC_MANAGER, SMConstructionError> {
         // 1 Open the sync manager db.
-        let db_path = format!("storage/{}/sync_manager", chain.to_string());
+        let db_path = format!("storage/{}/sync_manager", chain);
         let db = sled::open(db_path).map_err(SMConstructionError::DBOpenError)?;
 
         // 2 Get the bitcoin sync height tip from the db.
@@ -149,7 +149,7 @@ impl SyncManager {
 /// Erases the sync manager by db path.
 pub fn erase_sync_manager(chain: Chain) {
     // Sync manager db path.
-    let sync_manager_db_path = format!("storage/{}/sync_manager", chain.to_string());
+    let sync_manager_db_path = format!("storage/{}/sync_manager", chain);
 
     // Erase the sync manager db path.
     let _ = std::fs::remove_dir_all(sync_manager_db_path);
