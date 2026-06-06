@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_DUP_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Duplicates the last item on the main stack.
@@ -20,7 +20,7 @@ impl OP_DUP {
         let last_item = stack_holder.last_item()?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_DUP_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_dup))?;
 
         // Push the cloned value back to the main stack.
         stack_holder.push(last_item)?;

@@ -2,6 +2,7 @@ use crate::executive::stack::{
     stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem,
 };
 use crate::transmutative::hash::{Hash, HashTag};
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The input is hashed with a domain separation tag.
@@ -33,7 +34,7 @@ impl OP_TAGGEDHASH {
         };
 
         // Increment the ops counter.
-        stack_holder.increment_ops(calculate_ops(preimage.len()))?;
+        stack_holder.increment_ops(calculate_ops(preimage.len(), stack_holder))?;
 
         // Push the hash back to the main stack.
         stack_holder.push(StackItem::new(hash.to_vec()))?;
@@ -47,15 +48,12 @@ impl OP_TAGGEDHASH {
     }
 }
 
-const TAGGEDHASH_OPS_BASE: u32 = 10;
-const TAGGEDHASH_OPS_MULTIPLIER: u32 = 1;
-const TAGGEDHASH_OPS_OUTPUT_LEN: u32 = 32;
-
 // Calculate the number of ops for a OP_TAGGEDHASH opcode.
-fn calculate_ops(preimage_len: u32) -> u32 {
-    // Calculate the gap between the preimage length and the output length.
-    let gap = TAGGEDHASH_OPS_OUTPUT_LEN.saturating_sub(preimage_len);
+fn calculate_ops(preimage_len: u32, stack_holder: &StackHolder) -> u32 {
+    let ops = stack_holder.opcode_ops();
+    let output_len = OpcodeOpsParams::as_u32(ops.op_taggedhash_output_len);
+    let gap = output_len.saturating_sub(preimage_len);
 
-    // Return the number of ops.
-    TAGGEDHASH_OPS_BASE + (TAGGEDHASH_OPS_MULTIPLIER * gap)
+    OpcodeOpsParams::as_u32(ops.op_taggedhash_base)
+        + (OpcodeOpsParams::as_u32(ops.op_taggedhash_per_byte_gap) * gap)
 }

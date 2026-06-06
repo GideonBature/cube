@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_15_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Pushes number 15 (0x0f) to the main stack.
@@ -20,7 +20,7 @@ impl OP_15 {
         let item_to_push = StackItem::new(vec![0x0f]);
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_15_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_15))?;
 
         // Push the item to the main stack.
         stack_holder.push(item_to_push)?;

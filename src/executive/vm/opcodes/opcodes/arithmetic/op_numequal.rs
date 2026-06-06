@@ -1,5 +1,4 @@
 use crate::executive::{
-    opcode::ops::OP_NUMEQUAL_OPS,
     stack::{
         stack_error::{StackError, StackUintError},
         stack_holder::StackHolder,
@@ -7,6 +6,7 @@ use crate::executive::{
         stack_uint::StackItemUintExt,
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Returns 1 if the numbers are equal, 0 otherwise.
@@ -45,7 +45,7 @@ impl OP_NUMEQUAL {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_NUMEQUAL_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_numequal))?;
 
         Ok(())
     }

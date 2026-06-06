@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_FROMALTSTACK_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Puts the input onto the top of the main stack. Removes it from the alt stack.
@@ -20,7 +20,7 @@ impl OP_FROMALTSTACK {
         let last_item = stack_holder.alt_stack_pop()?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_FROMALTSTACK_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_fromaltstack))?;
 
         // Push the last item to the main stack.
         stack_holder.push(last_item)?;

@@ -1,5 +1,4 @@
 use crate::executive::{
-    opcode::ops::OP_DIV_OPS,
     stack::{
         stack_error::{StackError, StackUintError},
         stack_holder::StackHolder,
@@ -7,6 +6,7 @@ use crate::executive::{
         stack_uint::{StackItemUintExt, StackUint},
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Divides two items on the main stack. Returns the modulo and division result.
@@ -63,7 +63,7 @@ impl OP_DIV {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_DIV_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_div))?;
 
         Ok(())
     }

@@ -1,6 +1,7 @@
 use crate::executive::stack::{
     stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use bitcoin::hashes::sha256;
 use bitcoin::hashes::Hash;
 use serde::{Deserialize, Serialize};
@@ -11,8 +12,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_SHA256;
 
 /// The number of ops for the `OP_SHA256` opcode.
-pub const SHA256_OPS: u32 = 42;
-
 impl OP_SHA256 {
     pub fn execute(stack_holder: &mut StackHolder) -> Result<(), StackError> {
         // If this is not the active execution, return immediately.
@@ -29,7 +28,7 @@ impl OP_SHA256 {
             .to_vec();
 
         // Increment the ops counter.
-        stack_holder.increment_ops(SHA256_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_sha256))?;
 
         // Push the hash back to the main stack.
         stack_holder.push(StackItem::new(hash))?;

@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_OR_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Boolean or between each bit in the inputs.
@@ -34,7 +34,7 @@ impl OP_OR {
         stack_holder.push(StackItem::new(or_item))?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_OR_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_or))?;
 
         Ok(())
     }

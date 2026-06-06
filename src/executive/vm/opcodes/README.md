@@ -130,7 +130,7 @@ Cube uses an extended Bitcoin script with splicing, better memory management, an
 | OP_SECPSCALARMUL          | 0xaf     | 10           | scalar scalar    | scalar              | Multiplies two secp scalars.                                               |
 | OP_SECPPOINTADD           | 0xb0     | 50           | point point      | point               | Adds two secp points.                                                      |
 | OP_SECPPOINTMUL           | 0xb1     | 50           | point scalar     | point               | Multiplies a secp point by a secp scalar.                                  |
-| OP_PUSHSECPGENERATORPOINT | 0xb2     | 50           | -               | point               | Pushes generator point into stack.                                         |
+| OP_PUSHSECPGENERATORPOINT | 0xb2     | 50           | -                | point               | Pushes generator point into stack.                                         |
 | OP_ISZEROSECPSCALAR       | 0xb3     | 50           | scalar           | scalar true / false | Returns whether the scalar is zero.                                        |
 | OP_ISINFINITESECPPOINT    | 0xb4     | 50           | point            | point true / false  | Returns whether the point is at infinity.                                  |
 
@@ -189,6 +189,7 @@ Cube uses an extended Bitcoin script with splicing, better memory management, an
 |:---------------|:---------|:----|:---------------------|:-----------------------|:---------------------------------------------------------------------------------|
 | OP_SWRITE      | 0xcd     | 50  | x1 x2                | x1                     | Pops the storage key and value, and writes the value to the contract's storage.  |
 | OP_SREAD       | 0xce     | 50  | x1                   | x1                     | Pops the storage key, and reads the value from the contract's storage.           |
+| OP_SFREE       | 0xcf     | 1   | x1 x2                | x1                     | Pops the memory key, and frees the key/value from the contract's storage.        |
 
 ## Memory
 
@@ -197,3 +198,15 @@ Cube uses an extended Bitcoin script with splicing, better memory management, an
 | OP_MWRITE      | 0xd0     | 5   | x1 x2                | x1                     | Pops the memory key and value, and writes the value to the contract's memory.    |
 | OP_MREAD       | 0xd1     | 5   | x1                   | x1                     | Pops the memory key, and reads the value from the contract's memory.             |
 | OP_MFREE       | 0xd2     | 1   | x1                   | x1                     | Pops the memory key, and frees the key/value from the contract's memory.         |
+
+## Governance
+
+| Opcode           | Bytecode | Ops   | Input                | Output                 | Description                                                                      |
+|:-----------------|:---------|:------|:---------------------|:-----------------------|:---------------------------------------------------------------------------------|
+| OP_UPDATE_PARAM  | 0xd3     | 100   | x1 x2                | x1                     | Pops the param key and value, and updates the param with params manager.         |
+| OP_GOV_ACCOUNT   | 0xd4     | 100   | ?                    | ?                      | Complicated.                                                                     |
+| OP_GOV_CONTRACT  | 0xd5     | 100   | ?                    | ?                      | Complicated.                                                                     |
+| OP_RECONSTITUTE  | 0xd6     | 100   | x1                   | x1                     | Re-constitutes the governance contract.                                          |
+
+## Introspective
+...

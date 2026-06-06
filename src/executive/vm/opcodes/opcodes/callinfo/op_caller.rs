@@ -2,6 +2,7 @@ use crate::executive::{
     stack::{stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem},
     vm::program_execution::caller::Caller,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Pushes the caller type and id to the stack.
@@ -10,8 +11,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_CALLER;
 
 /// The number of ops for the `OP_CALLER` opcode.
-pub const CALLER_OPS: u32 = 1;
-
 impl OP_CALLER {
     pub fn execute(stack_holder: &mut StackHolder) -> Result<(), StackError> {
         // If this is not the active execution, return immediately.
@@ -40,7 +39,7 @@ impl OP_CALLER {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(CALLER_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_caller))?;
 
         Ok(())
     }

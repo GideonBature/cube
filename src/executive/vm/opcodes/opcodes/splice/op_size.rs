@@ -1,5 +1,4 @@
 use crate::executive::{
-    opcode::ops::OP_SIZE_OPS,
     stack::{
         stack_error::StackError,
         stack_holder::StackHolder,
@@ -7,6 +6,7 @@ use crate::executive::{
         stack_uint::{SafeConverter, StackItemUintExt, StackUint},
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Pushes the string length of the top element of the stack (without popping it).
@@ -37,7 +37,7 @@ impl OP_SIZE {
         stack_holder.push(item_size_stack_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_SIZE_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_size))?;
 
         Ok(())
     }

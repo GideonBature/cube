@@ -1,4 +1,5 @@
 use crate::executive::stack::stack_uint::StackItemUintExt;
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use crate::executive::stack::{
     stack_error::{StackError, StackUintError},
     stack_holder::StackHolder,
@@ -55,7 +56,7 @@ impl OP_BLAKE2SVAR {
         hasher.finalize_variable(&mut output_buffer).unwrap();
 
         // Increment the ops counter.
-        stack_holder.increment_ops(calculate_ops(output_size_as_usize as u32))?;
+        stack_holder.increment_ops(calculate_ops(output_size_as_usize as u32, stack_holder))?;
 
         // Push the hash back to the main stack.
         stack_holder.push(StackItem::new(output_buffer))?;
@@ -69,11 +70,9 @@ impl OP_BLAKE2SVAR {
     }
 }
 
-const BLAKE2SVAR_OPS_BASE: u32 = 10;
-const BLAKE2SVAR_OPS_MULTIPLIER: u32 = 1;
-
 // Calculate the number of ops for a OP_BLAKE2SVAR opcode.
-fn calculate_ops(output_size: u32) -> u32 {
-    // Return the number of ops.
-    BLAKE2SVAR_OPS_BASE + (BLAKE2SVAR_OPS_MULTIPLIER * output_size)
+fn calculate_ops(output_size: u32, stack_holder: &StackHolder) -> u32 {
+    let ops = stack_holder.opcode_ops();
+    OpcodeOpsParams::as_u32(ops.op_blake2svar_base)
+        + (OpcodeOpsParams::as_u32(ops.op_blake2svar_per_byte) * output_size)
 }

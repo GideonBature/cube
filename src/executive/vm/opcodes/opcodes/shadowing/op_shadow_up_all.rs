@@ -3,6 +3,7 @@ use crate::executive::stack::{
     stack_holder::StackHolder,
     stack_uint::{SafeConverter, StackItemUintExt},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use crate::inscriptive::coin_manager::coin_manager::COIN_MANAGER;
 use serde::{Deserialize, Serialize};
 
@@ -48,6 +49,8 @@ impl OP_SHADOW_UP_ALL {
         }
 
         // Return the result.
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_shadow_up_all))?;
+
         Ok(())
     }
 

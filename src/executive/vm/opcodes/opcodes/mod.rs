@@ -6,6 +6,7 @@ pub mod callinfo;
 pub mod coin;
 pub mod digest;
 pub mod flow;
+pub mod governance;
 pub mod memory;
 pub mod push;
 pub mod secp;

@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_NOP_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The `OP_NOP` opcode.
@@ -16,7 +16,7 @@ impl OP_NOP {
             return Ok(());
         }
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_NOP_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_nop))?;
 
         Ok(())
     }

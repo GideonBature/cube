@@ -7,6 +7,7 @@ use crate::{
     },
     inscriptive::state_manager::state_manager::STATE_MANAGER,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The `OP_SREAD` opcode.
@@ -15,8 +16,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_SREAD;
 
 /// The number of ops for the `OP_SREAD` opcode.
-pub const SREAD_OPS: u32 = 50;
-
 impl OP_SREAD {
     pub async fn execute(
         stack_holder: &mut StackHolder,
@@ -54,13 +53,13 @@ impl OP_SREAD {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(SREAD_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_sread))?;
 
         Ok(())
     }
 
     /// Returns the bytecode for the `OP_SREAD` opcode (0xc9).
     pub fn bytecode() -> Vec<u8> {
-        vec![0xc9]
+        vec![0xce]
     }
 }

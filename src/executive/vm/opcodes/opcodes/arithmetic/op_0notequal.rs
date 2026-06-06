@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_0NOTEQUAL_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Returns 0 if the input is 0. 1 otherwise.
@@ -26,7 +26,7 @@ impl OP_0NOTEQUAL {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_0NOTEQUAL_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_0notequal))?;
 
         Ok(())
     }

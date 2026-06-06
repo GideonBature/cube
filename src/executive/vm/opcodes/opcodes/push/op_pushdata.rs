@@ -1,3 +1,4 @@
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use super::op_10::OP_10;
 use super::op_11::OP_11;
 use super::op_12::OP_12;
@@ -49,7 +50,7 @@ impl OP_PUSHDATA {
         stack_holder.push(item_to_push)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(calculate_ops(data_len))?;
+        stack_holder.increment_ops(calculate_ops(data_len, stack_holder))?;
 
         Ok(())
     }
@@ -172,10 +173,9 @@ impl OP_PUSHDATA {
     }
 }
 
-const PUSHDATA_OPS_BASE: u32 = 1;
-const PUSHDATA_OPS_MULTIPLIER: u32 = 1;
-
 // Calculate the number of ops for a push data opcode.
-fn calculate_ops(data_len: u32) -> u32 {
-    PUSHDATA_OPS_BASE + (PUSHDATA_OPS_MULTIPLIER * data_len)
+fn calculate_ops(data_len: u32, stack_holder: &StackHolder) -> u32 {
+    let ops = stack_holder.opcode_ops();
+    OpcodeOpsParams::as_u32(ops.op_pushdata_base)
+        + (OpcodeOpsParams::as_u32(ops.op_pushdata_per_byte) * data_len)
 }

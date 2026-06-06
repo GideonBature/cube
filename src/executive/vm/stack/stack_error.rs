@@ -8,7 +8,10 @@ use crate::inscriptive::{
     coin_manager::errors::shadow_update_errors::{
         CMShadowDownAllError, CMShadowDownError, CMShadowUpAllError, CMShadowUpError,
     },
-    state_manager::errors::insert_update_state_error::SMInsertUpdateStateError,
+    state_manager::errors::{
+        insert_update_state_error::SMInsertUpdateStateError,
+        remove_state_error::SMRemoveStateError,
+    },
 };
 
 /// The call error.
@@ -80,6 +83,8 @@ pub enum StorageError {
     InvalidStorageValueLength(u8),
     /// The state holder insert update value error.
     StateManagerInsertUpdateStateError(SMInsertUpdateStateError),
+    /// The state holder remove state error.
+    StateManagerRemoveStateError(SMRemoveStateError),
 }
 
 /// The memory error.

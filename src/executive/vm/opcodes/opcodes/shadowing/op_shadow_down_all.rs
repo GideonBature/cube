@@ -3,6 +3,7 @@ use crate::executive::stack::{
     stack_holder::StackHolder,
     stack_uint::{SafeConverter, StackItemUintExt},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use crate::inscriptive::coin_manager::coin_manager::COIN_MANAGER;
 use serde::{Deserialize, Serialize};
 
@@ -47,6 +48,8 @@ impl OP_SHADOW_DOWN_ALL {
                 .map_err(ShadowOpsError::ShadowAllocDownAllError)
                 .map_err(StackError::ShadowOpsError)?;
         }
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_shadow_down_all))?;
+
         Ok(())
     }
 

@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_EQUAL_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Returns 1 if the inputs are exactly equal, 0 otherwise.
@@ -27,7 +27,7 @@ impl OP_EQUAL {
         };
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_EQUAL_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_equal))?;
 
         // Push the item to the main stack.
         stack_holder.push(item_to_push)?;

@@ -1,11 +1,11 @@
 use crate::executive::{
-    opcode::ops::OP_NUMEQUALVERIFY_OPS,
     stack::{
         stack_error::{MandatoryError, StackError, StackUintError},
         stack_holder::StackHolder,
         stack_uint::StackItemUintExt,
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Same as OP_NUMEQUAL, but runs OP_VERIFY afterward.
@@ -44,7 +44,7 @@ impl OP_NUMEQUALVERIFY {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_NUMEQUALVERIFY_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_numequalverify))?;
 
         Ok(())
     }

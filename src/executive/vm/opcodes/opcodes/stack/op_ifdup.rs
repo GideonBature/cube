@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_IFDUP_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Duplicates the last item on the main stack if it is not zero.
@@ -29,7 +29,7 @@ impl OP_IFDUP {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_IFDUP_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_ifdup))?;
 
         Ok(())
     }

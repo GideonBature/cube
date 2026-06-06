@@ -1,5 +1,4 @@
 use crate::executive::{
-    opcode::ops::OP_DEPTH_OPS,
     stack::{
         stack_error::StackError,
         stack_holder::StackHolder,
@@ -7,6 +6,7 @@ use crate::executive::{
         stack_uint::{SafeConverter, StackItemUintExt, StackUint},
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Puts the number of stack items onto the stack.
@@ -31,7 +31,7 @@ impl OP_DEPTH {
         let depth_as_stack_item = StackItem::from_stack_uint(depth_as_stack_uint);
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_DEPTH_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_depth))?;
 
         // Push the depth to the main stack.
         stack_holder.push(depth_as_stack_item)?;

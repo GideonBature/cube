@@ -63,6 +63,10 @@ use crate::executive::opcode::opcodes::flow::op_notif::OP_NOTIF;
 use crate::executive::opcode::opcodes::flow::op_returnall::OP_RETURNALL;
 use crate::executive::opcode::opcodes::flow::op_returnsome::OP_RETURNSOME;
 use crate::executive::opcode::opcodes::flow::op_verify::OP_VERIFY;
+use crate::executive::opcode::opcodes::governance::op_gov_account::OP_GOV_ACCOUNT;
+use crate::executive::opcode::opcodes::governance::op_gov_contract::OP_GOV_CONTRACT;
+use crate::executive::opcode::opcodes::governance::op_reconstitute::OP_RECONSTITUTE;
+use crate::executive::opcode::opcodes::governance::op_update_param::OP_UPDATE_PARAM;
 use crate::executive::opcode::opcodes::memory::op_free::OP_MFREE;
 use crate::executive::opcode::opcodes::memory::op_mread::OP_MREAD;
 use crate::executive::opcode::opcodes::memory::op_mwrite::OP_MWRITE;
@@ -127,6 +131,7 @@ use crate::executive::opcode::opcodes::stack::op_roll::OP_ROLL;
 use crate::executive::opcode::opcodes::stack::op_rot::OP_ROT;
 use crate::executive::opcode::opcodes::stack::op_swap::OP_SWAP;
 use crate::executive::opcode::opcodes::stack::op_tuck::OP_TUCK;
+use crate::executive::opcode::opcodes::storage::op_sfree::OP_SFREE;
 use crate::executive::opcode::opcodes::storage::op_sread::OP_SREAD;
 use crate::executive::opcode::opcodes::storage::op_swrite::OP_SWRITE;
 
@@ -301,11 +306,18 @@ impl OpcodeCompiler for Opcode {
             // Storage
             Opcode::OP_SWRITE(_) => Ok(OP_SWRITE::bytecode()),
             Opcode::OP_SREAD(_) => Ok(OP_SREAD::bytecode()),
+            Opcode::OP_SFREE(_) => Ok(OP_SFREE::bytecode()),
 
             // Memory
             Opcode::OP_MWRITE(_) => Ok(OP_MWRITE::bytecode()),
             Opcode::OP_MREAD(_) => Ok(OP_MREAD::bytecode()),
             Opcode::OP_MFREE(_) => Ok(OP_MFREE::bytecode()),
+
+            // Governance
+            Opcode::OP_UPDATE_PARAM(_) => Ok(OP_UPDATE_PARAM::bytecode()),
+            Opcode::OP_GOV_ACCOUNT(_) => Ok(OP_GOV_ACCOUNT::bytecode()),
+            Opcode::OP_GOV_CONTRACT(_) => Ok(OP_GOV_CONTRACT::bytecode()),
+            Opcode::OP_RECONSTITUTE(_) => Ok(OP_RECONSTITUTE::bytecode()),
         }
     }
 
@@ -556,11 +568,18 @@ impl OpcodeCompiler for Opcode {
             // Storage
             0xcd => Ok(Opcode::OP_SWRITE(OP_SWRITE)),
             0xce => Ok(Opcode::OP_SREAD(OP_SREAD)),
+            0xcf => Ok(Opcode::OP_SFREE(OP_SFREE)),
 
             // Memory
             0xd0 => Ok(Opcode::OP_MWRITE(OP_MWRITE)),
             0xd1 => Ok(Opcode::OP_MREAD(OP_MREAD)),
             0xd2 => Ok(Opcode::OP_MFREE(OP_MFREE)),
+
+            // Governance
+            0xd3 => Ok(Opcode::OP_UPDATE_PARAM(OP_UPDATE_PARAM)),
+            0xd4 => Ok(Opcode::OP_GOV_ACCOUNT(OP_GOV_ACCOUNT)),
+            0xd5 => Ok(Opcode::OP_GOV_CONTRACT(OP_GOV_CONTRACT)),
+            0xd6 => Ok(Opcode::OP_RECONSTITUTE(OP_RECONSTITUTE)),
 
             // Undefined
             _ => Err(OpcodeDecompileError::UndefinedOpcodeError),

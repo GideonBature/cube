@@ -4,6 +4,7 @@ use crate::executive::stack::{
     stack_item::StackItem,
     stack_uint::{SafeConverter, StackItemUintExt},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Checks if a secp scalar is zero.
@@ -12,8 +13,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_ISZEROSECPSCALAR;
 
 /// The number of ops for the `OP_ISZEROSECPSCALAR` opcode.
-pub const ISZEROSECPSCALAR_OPS: u32 = 1;
-
 impl OP_ISZEROSECPSCALAR {
     pub fn execute(stack_holder: &mut StackHolder) -> Result<(), StackError> {
         // If this is not the active execution, return immediately.
@@ -43,7 +42,7 @@ impl OP_ISZEROSECPSCALAR {
         stack_holder.push(result_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(ISZEROSECPSCALAR_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_iszerosecpscalar))?;
 
         Ok(())
     }

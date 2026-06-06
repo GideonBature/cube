@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_2DROP_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Removes the top two stack items.
@@ -21,7 +21,7 @@ impl OP_2DROP {
         stack_holder.pop()?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_2DROP_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_2drop))?;
 
         Ok(())
     }

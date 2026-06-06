@@ -4,6 +4,7 @@ use crate::executive::stack::{
     stack_holder::StackHolder,
 };
 use crate::inscriptive::state_manager::state_manager::STATE_MANAGER;
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The `OP_SWRITE` opcode.
@@ -59,7 +60,7 @@ impl OP_SWRITE {
         }
 
         // Calculate the number of ops.
-        let ops = calculate_ops(key.len(), value.len());
+        let ops = calculate_ops(key.len() as u32, value.len() as u32, stack_holder);
 
         // Increment the ops counter.
         stack_holder.increment_ops(ops)?;
@@ -67,18 +68,16 @@ impl OP_SWRITE {
         Ok(())
     }
 
-    /// Returns the bytecode for the `OP_SWRITE` opcode (0xc8).
+    /// Returns the bytecode for the `OP_SWRITE` opcode (0xcd).
     pub fn bytecode() -> Vec<u8> {
-        vec![0xc8]
+        vec![0xcd]
     }
 }
 
-const SWRITE_OPS_BASE: u32 = 50;
-const SWRITE_OPS_MULTIPLIER: u32 = 1;
-
 // Calculate the number of ops for a SWRITE opcode.
-fn calculate_ops(key_length: u32, value_length: u32) -> u32 {
+fn calculate_ops(key_length: u32, value_length: u32, stack_holder: &StackHolder) -> u32 {
     let total_length = key_length + value_length;
-    // Return the number of ops.
-    SWRITE_OPS_BASE + (SWRITE_OPS_MULTIPLIER * total_length)
+    let ops = stack_holder.opcode_ops();
+    OpcodeOpsParams::as_u32(ops.op_swrite_base)
+        + (OpcodeOpsParams::as_u32(ops.op_swrite_per_byte) * total_length)
 }

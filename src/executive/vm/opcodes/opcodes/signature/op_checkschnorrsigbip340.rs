@@ -3,6 +3,7 @@ use crate::executive::stack::{
     stack_holder::StackHolder,
     stack_item::StackItem,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use crate::transmutative::secp::schnorr::{self, SchnorrSigningMode};
 use serde::{Deserialize, Serialize};
 
@@ -12,8 +13,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_CHECKSCHNORRSIGBIP340;
 
 /// The number of ops for the `OP_CHECKSCHNORRSIGBIP340` opcode.
-pub const CHECKSCHNORRSIGBIP340_OPS: u32 = 100;
-
 impl OP_CHECKSCHNORRSIGBIP340 {
     pub fn execute(stack_holder: &mut StackHolder) -> Result<(), StackError> {
         // If this is not the active execution, return immediately.
@@ -107,7 +106,7 @@ impl OP_CHECKSCHNORRSIGBIP340 {
         stack_holder.push(result_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(CHECKSCHNORRSIGBIP340_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_checkschnorrsigbip340))?;
 
         Ok(())
     }

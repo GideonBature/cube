@@ -1,5 +1,4 @@
 use crate::executive::{
-    opcode::ops::OP_WITHIN_OPS,
     stack::{
         stack_error::{StackError, StackUintError},
         stack_holder::StackHolder,
@@ -7,6 +6,7 @@ use crate::executive::{
         stack_uint::StackItemUintExt,
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Returns 1 if x is within the specified range (left-inclusive), 0 otherwise.
@@ -52,7 +52,7 @@ impl OP_WITHIN {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_WITHIN_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_within))?;
 
         Ok(())
     }

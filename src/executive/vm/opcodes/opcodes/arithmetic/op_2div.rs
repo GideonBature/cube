@@ -1,5 +1,4 @@
 use crate::executive::{
-    opcode::ops::OP_2DIV_OPS,
     stack::{
         stack_error::{StackError, StackUintError},
         stack_holder::StackHolder,
@@ -7,6 +6,7 @@ use crate::executive::{
         stack_uint::{SafeConverter, StackItemUintExt, StackUint},
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Divides the top item on the main stack by 2. Returns the modulo and division result.
@@ -43,7 +43,7 @@ impl OP_2DIV {
         stack_holder.push(StackItem::true_item())?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_2DIV_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_2div))?;
 
         Ok(())
     }

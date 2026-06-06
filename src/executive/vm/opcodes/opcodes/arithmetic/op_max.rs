@@ -1,5 +1,4 @@
 use crate::executive::{
-    opcode::ops::OP_MAX_OPS,
     stack::{
         stack_error::{StackError, StackUintError},
         stack_holder::StackHolder,
@@ -7,6 +6,7 @@ use crate::executive::{
         stack_uint::StackItemUintExt,
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Returns the larger of a and b.
@@ -44,7 +44,7 @@ impl OP_MAX {
         stack_holder.push(StackItem::from_stack_uint(larger))?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_MAX_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_max))?;
 
         Ok(())
     }

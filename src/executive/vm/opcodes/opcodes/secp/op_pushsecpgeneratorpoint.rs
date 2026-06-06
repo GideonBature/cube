@@ -1,6 +1,7 @@
 use crate::executive::stack::{
     stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use secp::Point;
 use serde::{Deserialize, Serialize};
 
@@ -10,8 +11,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_PUSHSECPGENERATORPOINT;
 
 /// The number of ops for the `OP_PUSHSECPGENERATORPOINT` opcode.
-pub const PUSHSECPGENERATORPOINT_OPS: u32 = 1;
-
 impl OP_PUSHSECPGENERATORPOINT {
     pub fn execute(stack_holder: &mut StackHolder) -> Result<(), StackError> {
         // If this is not the active execution, return immediately.
@@ -30,7 +29,7 @@ impl OP_PUSHSECPGENERATORPOINT {
         stack_holder.push(generator_point_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(PUSHSECPGENERATORPOINT_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_pushsecpgeneratorpoint))?;
 
         Ok(())
     }

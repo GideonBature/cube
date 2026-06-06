@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_TUCK_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The item at the top of the stack is copied and inserted before the second-to-top item.
@@ -32,7 +32,7 @@ impl OP_TUCK {
         stack_holder.push(last_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_TUCK_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_tuck))?;
 
         Ok(())
     }

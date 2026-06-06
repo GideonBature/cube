@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_2ROT_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The fifth and sixth items back are moved to the top of the stack.
@@ -35,7 +35,7 @@ impl OP_2ROT {
         stack_holder.push(fifth_to_top_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_2ROT_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_2rot))?;
 
         Ok(())
     }

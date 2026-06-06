@@ -4,6 +4,7 @@ use crate::executive::stack::{
     stack_item::StackItem,
     stack_uint::{SafeConverter, StackItemUintExt, StackUint},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Push the ops budget to the stack.
@@ -12,8 +13,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_OPSBUDGET;
 
 /// The number of ops for the `OP_OPSBUDGET` opcode.
-pub const OPSBUDGET_OPS: u32 = 1;
-
 impl OP_OPSBUDGET {
     pub fn execute(stack_holder: &mut StackHolder) -> Result<(), StackError> {
         // If this is not the active execution, return immediately.
@@ -34,7 +33,7 @@ impl OP_OPSBUDGET {
         stack_holder.push(ops_budget_as_stack_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OPSBUDGET_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_opsbudget))?;
 
         Ok(())
     }

@@ -3,11 +3,10 @@ use crate::executive::stack::{
     stack_holder::StackHolder,
     stack_uint::{SafeConverter, StackItemUintExt},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The number of ops for the `OP_JUMP` opcode.
-const JUMP_OPS: u32 = 1;
-
 /// Jumps to the respective opcode execution.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
@@ -40,7 +39,7 @@ impl OP_JUMP {
                 ))?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(JUMP_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_jump))?;
 
         // Return the iterator index.
         Ok(iterator_index_as_usize)

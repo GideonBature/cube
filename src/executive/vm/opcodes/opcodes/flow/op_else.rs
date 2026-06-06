@@ -1,11 +1,11 @@
 use crate::executive::{
-    opcode::ops::OP_ELSE_OPS,
     stack::{
         flow::{flow_encounter::FlowEncounter, flow_status::FlowStatus},
         stack_error::StackError,
         stack_holder::StackHolder,
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The `OP_ELSE` opcode.
@@ -39,7 +39,7 @@ impl OP_ELSE {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_ELSE_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_else))?;
 
         Ok(())
     }

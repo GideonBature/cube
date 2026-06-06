@@ -3,6 +3,7 @@ use crate::executive::stack::{
     stack_holder::StackHolder,
     stack_item::StackItem,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use secp::MaybePoint;
 use serde::{Deserialize, Serialize};
 
@@ -12,8 +13,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_SECPPOINTADD;
 
 /// The number of ops for the `OP_SECPPOINTADD` opcode.
-pub const SECPSPOINTADD_OPS: u32 = 10;
-
 impl OP_SECPPOINTADD {
     pub fn execute(stack_holder: &mut StackHolder) -> Result<(), StackError> {
         // If this is not the active execution, return immediately.
@@ -49,7 +48,7 @@ impl OP_SECPPOINTADD {
         stack_holder.push(addition_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(SECPSPOINTADD_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_secppointadd))?;
 
         Ok(())
     }

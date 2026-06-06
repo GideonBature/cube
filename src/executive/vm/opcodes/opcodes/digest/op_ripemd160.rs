@@ -1,6 +1,7 @@
 use crate::executive::stack::{
     stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem,
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use bitcoin::hashes::ripemd160;
 use bitcoin::hashes::Hash;
 use serde::{Deserialize, Serialize};
@@ -11,8 +12,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_RIPEMD160;
 
 /// The number of ops for the `OP_RIPEMD160` opcode.
-pub const RIPEMD160_OPS: u32 = 30;
-
 impl OP_RIPEMD160 {
     pub fn execute(stack_holder: &mut StackHolder) -> Result<(), StackError> {
         // If this is not the active execution, return immediately.
@@ -29,7 +28,7 @@ impl OP_RIPEMD160 {
             .to_vec();
 
         // Increment the ops counter.
-        stack_holder.increment_ops(RIPEMD160_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_ripemd160))?;
 
         // Push the hash back to the main stack.
         stack_holder.push(StackItem::new(hash))?;

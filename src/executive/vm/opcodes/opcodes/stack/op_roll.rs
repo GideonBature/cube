@@ -1,11 +1,11 @@
 use crate::executive::{
-    opcode::ops::OP_ROLL_OPS,
     stack::{
         stack_error::{StackError, StackUintError},
         stack_holder::StackHolder,
         stack_uint::StackItemUintExt,
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Rolls an item from the main stack to the top of the stack.
@@ -32,7 +32,7 @@ impl OP_ROLL {
         let item = stack_holder.item_by_depth(pick_depth.as_u32())?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_ROLL_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_roll))?;
 
         // Remove the item at the pick depth.
         stack_holder.remove_item_by_depth(pick_depth.as_u32())?;

@@ -4,6 +4,7 @@ use crate::executive::stack::{
     stack_item::StackItem,
     stack_uint::{SafeConverter, StackItemUintExt},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Calls an internal contract method.
@@ -12,8 +13,6 @@ use serde::{Deserialize, Serialize};
 pub struct OP_CALL;
 
 /// The number of ops for the `OP_CALL` opcode.
-pub const CALL_OPS: u32 = 5;
-
 /// Method index to be called.
 type MethodIndexToBeCalled = u16;
 
@@ -72,7 +71,7 @@ impl OP_CALL {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(CALL_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_call))?;
 
         Ok((method_index_as_u16, arguments))
     }

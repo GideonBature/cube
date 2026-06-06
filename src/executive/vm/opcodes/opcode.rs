@@ -30,6 +30,10 @@ use super::opcodes::{
         op_nop::OP_NOP, op_notif::OP_NOTIF, op_returnall::OP_RETURNALL,
         op_returnsome::OP_RETURNSOME, op_verify::OP_VERIFY,
     },
+    governance::{
+        op_gov_account::OP_GOV_ACCOUNT, op_gov_contract::OP_GOV_CONTRACT,
+        op_reconstitute::OP_RECONSTITUTE, op_update_param::OP_UPDATE_PARAM,
+    },
     memory::{op_free::OP_MFREE, op_mread::OP_MREAD, op_mwrite::OP_MWRITE},
     push::{
         op_10::OP_10, op_11::OP_11, op_12::OP_12, op_13::OP_13, op_14::OP_14, op_15::OP_15,
@@ -67,7 +71,7 @@ use crate::executive::opcode::opcodes::{
         op_shadow_has_alloc::OP_SHADOW_HAS_ALLOC, op_shadow_num_allocs::OP_SHADOW_NUM_ALLOCS,
         op_shadow_up::OP_SHADOW_UP, op_shadow_up_all::OP_SHADOW_UP_ALL,
     },
-    storage::{op_sread::OP_SREAD, op_swrite::OP_SWRITE},
+    storage::{op_sfree::OP_SFREE, op_sread::OP_SREAD, op_swrite::OP_SWRITE},
 };
 use serde::{Deserialize, Serialize};
 use std::fmt::{self, Display};
@@ -217,10 +221,17 @@ pub enum Opcode {
     // Storage
     OP_SWRITE(OP_SWRITE),
     OP_SREAD(OP_SREAD),
+    OP_SFREE(OP_SFREE),
     // Memory
     OP_MWRITE(OP_MWRITE),
     OP_MREAD(OP_MREAD),
     OP_MFREE(OP_MFREE),
+
+    // Governance
+    OP_UPDATE_PARAM(OP_UPDATE_PARAM),
+    OP_GOV_ACCOUNT(OP_GOV_ACCOUNT),
+    OP_GOV_CONTRACT(OP_GOV_CONTRACT),
+    OP_RECONSTITUTE(OP_RECONSTITUTE),
 }
 
 impl Display for Opcode {
@@ -369,10 +380,16 @@ impl Display for Opcode {
             // Storage
             Opcode::OP_SWRITE(_) => write!(f, "OP_SWRITE"),
             Opcode::OP_SREAD(_) => write!(f, "OP_SREAD"),
+            Opcode::OP_SFREE(_) => write!(f, "OP_SFREE"),
             // Memory
             Opcode::OP_MWRITE(_) => write!(f, "OP_MWRITE"),
             Opcode::OP_MREAD(_) => write!(f, "OP_MREAD"),
             Opcode::OP_MFREE(_) => write!(f, "OP_MFREE"),
+            // Governance
+            Opcode::OP_UPDATE_PARAM(_) => write!(f, "OP_UPDATE_PARAM"),
+            Opcode::OP_GOV_ACCOUNT(_) => write!(f, "OP_GOV_ACCOUNT"),
+            Opcode::OP_GOV_CONTRACT(_) => write!(f, "OP_GOV_CONTRACT"),
+            Opcode::OP_RECONSTITUTE(_) => write!(f, "OP_RECONSTITUTE"),
         }
     }
 }

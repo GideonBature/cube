@@ -1,5 +1,4 @@
 use crate::executive::{
-    opcode::ops::OP_SPLIT_OPS,
     stack::{
         stack_error::{StackError, StackUintError},
         stack_holder::StackHolder,
@@ -7,6 +6,7 @@ use crate::executive::{
         stack_uint::{SafeConverter, StackItemUintExt},
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Splits the byte array into two stack items at the index.
@@ -65,7 +65,7 @@ impl OP_SPLIT {
         stack_holder.push(right_slice)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_SPLIT_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_split))?;
 
         Ok(())
     }

@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_SWAP_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// The top two items on the stack are swapped.
@@ -26,7 +26,7 @@ impl OP_SWAP {
         stack_holder.push(second_to_top_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_SWAP_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_swap))?;
 
         Ok(())
     }

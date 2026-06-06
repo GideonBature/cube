@@ -1,10 +1,10 @@
 use crate::executive::{
-    opcode::ops::OP_VERIFY_OPS,
     stack::{
         stack_error::{MandatoryError, StackError},
         stack_holder::StackHolder,
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Pops an item from the main stack and checks if it is true. Fails if it is not.
@@ -30,7 +30,7 @@ impl OP_VERIFY {
         }
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_VERIFY_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_verify))?;
 
         Ok(())
     }

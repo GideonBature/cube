@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_OVER_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Copies the second-to-top stack item to the top.
@@ -23,7 +23,7 @@ impl OP_OVER {
         stack_holder.push(second_to_top_item)?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_OVER_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_over))?;
 
         Ok(())
     }

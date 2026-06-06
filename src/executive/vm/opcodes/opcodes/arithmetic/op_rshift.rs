@@ -1,7 +1,7 @@
 use crate::executive::{
-    opcode::ops::OP_RSHIFT_OPS,
     stack::{stack_error::StackError, stack_holder::StackHolder, stack_item::StackItem},
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Shifts a right b bits.
@@ -80,7 +80,7 @@ impl OP_RSHIFT {
         stack_holder.push(StackItem::new(result))?;
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_RSHIFT_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_rshift))?;
 
         Ok(())
     }

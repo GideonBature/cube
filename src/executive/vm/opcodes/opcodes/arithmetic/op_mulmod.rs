@@ -1,5 +1,4 @@
 use crate::executive::{
-    opcode::ops::OP_MULMOD_OPS,
     stack::{
         stack_error::{StackError, StackUintError},
         stack_holder::StackHolder,
@@ -7,6 +6,7 @@ use crate::executive::{
         stack_uint::{StackItemUintExt, StackUint},
     },
 };
+use crate::inscriptive::params_manager::params_holder::opcode_ops_params::OpcodeOpsParams;
 use serde::{Deserialize, Serialize};
 
 /// Multiplies two items on the main stack and returns the result modulo MAX::U256.
@@ -39,7 +39,7 @@ impl OP_MULMOD {
         let result = StackItem::from_stack_uint(StackUint::mulmod(&item_1_uint, &item_2_uint));
 
         // Increment the ops counter.
-        stack_holder.increment_ops(OP_MULMOD_OPS)?;
+        stack_holder.increment_ops(OpcodeOpsParams::as_u32(stack_holder.opcode_ops().op_mulmod))?;
 
         // Push the result to the main stack.
         stack_holder.push(result)?;
