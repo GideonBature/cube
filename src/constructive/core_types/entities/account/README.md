@@ -12,4 +12,4 @@ There are 2 core account types:
 Represents a distinct user within the system. Often the transactee and receiver.
 
 ## Root Account 🥕
-Not to be confused with computer terminology, `Root Account` is esentially an `Account` who calls the `Entry`. Often the transactor and sender.
+Not to be confused with computer terminology, `Root Account` is essentially an `Account` who calls the `Entry`. Often the transactor and sender.

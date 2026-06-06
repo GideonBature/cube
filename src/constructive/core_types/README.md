@@ -1,2 +1,2 @@
 # Fields
-Varios fields employed in Entries.
+Various fields employed in Entries.

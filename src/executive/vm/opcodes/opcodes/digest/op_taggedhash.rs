@@ -4,7 +4,7 @@ use crate::executive::stack::{
 use crate::transmutative::hash::{Hash, HashTag};
 use serde::{Deserialize, Serialize};
 
-/// The input is hashed with a domain seperation tag.
+/// The input is hashed with a domain separation tag.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 #[allow(non_camel_case_types)]
 pub struct OP_TAGGEDHASH;

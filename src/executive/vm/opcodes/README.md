@@ -27,7 +27,7 @@ Cube uses an extended Bitcoin script with splicing, better memory management, an
 | OP_VERIFY     | 0x69      | 1   | true / false | - / Fail.      | Pops the top stack item and marks transaction as invalid if top stack value is not true.           |
 | OP_FAIL       | 0x6a      | 1   | -            | Fail.          | Fails the entry.                                                                                   |
 
-## Alstack Operations
+## Altstack Operations
 
 | Opcode          | Bytecode | Ops | Input                   | Output                 | Description                                                                  |
 |:----------------|:---------|:----|:------------------------|:-----------------------|:-----------------------------------------------------------------------------|
@@ -118,7 +118,7 @@ Cube uses an extended Bitcoin script with splicing, better memory management, an
 | OP_SHA256             | 0xa8     | 42                 | preimage         | hash    | The input is hashed using SHA-256.                                           |
 | OP_HASH160            | 0xa9     | 72                 | preimage         | hash    | The input is hashed twice: first with SHA-256 and then with RIPEMD-160.      |
 | OP_HASH256            | 0xaa     | 84                 | preimage         | hash    | The input is hashed two times with SHA-256.                                  |
-| OP_TAGGEDHASH         | 0xab     | 42                 | preimage tag     | hash    | The input is hashed with a domain seperation tag.                            |
+| OP_TAGGEDHASH         | 0xab     | 42                 | preimage tag     | hash    | The input is hashed with a domain separation tag.                            |
 | OP_BLAKE2BVAR         | 0xac     | 10 + (1 * outsize) | preimage outsize | hash    | The input is hashed using Blake2b with the output size from stack.           |
 | OP_BLAKE2SVAR         | 0xad     | 10 + (1 * outsize) | preimage outsize | hash    | The input is hashed using Blake2s with the output size from stack.           |
 
