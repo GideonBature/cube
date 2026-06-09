@@ -90,8 +90,8 @@ use crate::{
     },
     inscriptive::{
         coin_manager::coin_manager::COIN_MANAGER,
-        params_manager::params_holder::params_holder::ParamsHolder,
-        registry::registry::REGISTRY, state_manager::state_manager::STATE_MANAGER,
+        params_manager::params_holder::params_holder::ParamsHolder, registry::registry::REGISTRY,
+        state_manager::state_manager::STATE_MANAGER,
     },
 };
 
@@ -204,11 +204,9 @@ pub async fn execute(
             let payable_allocation_in_satoshis = payable_allocation_value as u64;
             let account_balance = {
                 let _coin_manager = coin_manager.lock().await;
-                _coin_manager
-                    .get_account_balance(caller_key)
-                    .ok_or(ExecutionError::PayableAllocationAccountNotFoundError(
-                        caller_key,
-                    ))?
+                _coin_manager.get_account_balance(caller_key).ok_or(
+                    ExecutionError::PayableAllocationAccountNotFoundError(caller_key),
+                )?
             };
             if account_balance < payable_allocation_in_satoshis {
                 return Err(
