@@ -187,10 +187,8 @@ pub async fn execute(
                 return Err(ExecutionError::MinPayableAllocationError);
             }
 
-            // TODO: CHECK ENOUGH BALANCE.
-
             // If a payable value is allocted, the caller must also be an account.
-            let _caller_key = match caller {
+            let caller_key = match caller {
                 Caller::Account(key) => key,
                 Caller::Contract(_) => {
                     return Err(ExecutionError::PayableAllocationCallerIsNotAnAccountError);
@@ -200,6 +198,26 @@ pub async fn execute(
             // If a payable value is allocted, this cannot be an internal call.
             if internal {
                 return Err(ExecutionError::PayableWithInternalCallError);
+            }
+
+            // The caller must have enough liquid balance to cover the payable allocation.
+            let payable_allocation_in_satoshis = payable_allocation_value as u64;
+            let account_balance = {
+                let _coin_manager = coin_manager.lock().await;
+                _coin_manager
+                    .get_account_balance(caller_key)
+                    .ok_or(ExecutionError::PayableAllocationAccountNotFoundError(
+                        caller_key,
+                    ))?
+            };
+            if account_balance < payable_allocation_in_satoshis {
+                return Err(
+                    ExecutionError::InsufficientBalanceForPayableAllocationError {
+                        account_key: caller_key,
+                        required: payable_allocation_in_satoshis,
+                        available: account_balance,
+                    },
+                );
             }
 
             // Insert the allocation into the accountant.
