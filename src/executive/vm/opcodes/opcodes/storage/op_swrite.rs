@@ -60,7 +60,7 @@ impl OP_SWRITE {
         }
 
         // Calculate the number of ops.
-        let ops = calculate_ops(key.len() as u32, value.len() as u32, stack_holder);
+        let ops = calculate_ops(key.len(), value.len(), stack_holder);
 
         // Increment the ops counter.
         stack_holder.increment_ops(ops)?;

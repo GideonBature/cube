@@ -876,7 +876,7 @@ pub async fn execute(
             Opcode::OP_SFREE(OP_SFREE) => {
                 OP_SFREE::execute(&mut stack_holder, state_manager)
                     .await
-                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
+                    .map_err(ExecutionError::OpcodeExecutionError)?;
             }
 
             // Memory opcodes.
@@ -896,19 +896,19 @@ pub async fn execute(
             // Governance opcodes.
             Opcode::OP_UPDATE_PARAM(OP_UPDATE_PARAM) => {
                 OP_UPDATE_PARAM::execute(&mut stack_holder)
-                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
+                    .map_err(ExecutionError::OpcodeExecutionError)?;
             }
             Opcode::OP_GOV_ACCOUNT(OP_GOV_ACCOUNT) => {
                 OP_GOV_ACCOUNT::execute(&mut stack_holder)
-                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
+                    .map_err(ExecutionError::OpcodeExecutionError)?;
             }
             Opcode::OP_GOV_CONTRACT(OP_GOV_CONTRACT) => {
                 OP_GOV_CONTRACT::execute(&mut stack_holder)
-                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
+                    .map_err(ExecutionError::OpcodeExecutionError)?;
             }
             Opcode::OP_RECONSTITUTE(OP_RECONSTITUTE) => {
                 OP_RECONSTITUTE::execute(&mut stack_holder)
-                    .map_err(|error| ExecutionError::OpcodeExecutionError(error))?;
+                    .map_err(ExecutionError::OpcodeExecutionError)?;
             }
         }
     }
