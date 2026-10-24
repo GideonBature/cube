@@ -33,6 +33,7 @@ mod liftv2_regtest_tests {
         parse_claim_script, parse_statement_op_return_script, statement_op_return_script,
     };
     use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
+    use cube::constructive::graph::claim_recovery::ClaimRecovery;
     use cube::constructive::graph::successor_funding::{DepositAnchor, SuccessorFunding};
     use cube::constructive::taproot::TapRoot;
     use cube::constructive::txo::lift::lift_versions::liftv2::liftv2::return_liftv2_taproot;
@@ -740,57 +741,31 @@ mod liftv2_regtest_tests {
         output_value: u64,
         output_spk: ScriptBuf,
     ) -> Transaction {
-        let claim_outpoint = package
-            .claim_outpoint
-            .expect("a recoverable package must carry its outpoint");
-
-        let mut tx = Transaction {
-            version: bitcoin::transaction::Version::TWO,
-            lock_time: LockTime::ZERO,
-            input: vec![TxIn {
-                previous_output: OutPoint {
-                    txid: bitcoin::Txid::from_byte_array(claim_outpoint.txid),
-                    vout: claim_outpoint.vout,
-                },
-                script_sig: ScriptBuf::new(),
-                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-                witness: Witness::new(),
-            }],
-            output: vec![TxOut {
-                value: Amount::from_sat(output_value),
-                script_pubkey: output_spk,
-            }],
-        };
-
-        let leaf_hash = bitcoin::taproot::TapLeafHash::from_byte_array(
-            cube::constructive::taproot::hash_tap_leaf(&package.claim_script, 0xc0),
-        );
+        // The recovery descriptor owns the shape and the sighash; this helper only signs.
+        let fee_sats = prevout
+            .value
+            .to_sat()
+            .checked_sub(output_value)
+            .expect("the output must not exceed the claim");
+        let recovery = ClaimRecovery::new(package, prevout, output_spk, fee_sats)
+            .expect("the recovery descriptor must hold");
+        let mut transaction = recovery.transaction();
+        let sighash = recovery
+            .signing_hash(prevout)
+            .expect("the recovery sighash must compute");
 
         let secp = Secp256k1::new();
-        let sighash = SighashCache::new(&tx)
-            .taproot_signature_hash(
-                0,
-                &Prevouts::All(std::slice::from_ref(prevout)),
-                None,
-                Some((leaf_hash, 0xffff_ffff)),
-                TapSighashType::Default,
-            )
-            .expect("sighash");
-        let message = Message::from_digest(sighash.to_byte_array());
         let keypair = Keypair::from_secret_key(
             &secp,
             &SecretKey::from_slice(&beneficiary_secret).expect("valid secret"),
         );
+        let message = Message::from_digest(sighash);
         let signature = secp.sign_schnorr_no_aux_rand(&message, &keypair);
         secp.verify_schnorr(&signature, &message, &keypair.x_only_public_key().0)
             .expect("the claim signature must verify locally");
 
-        tx.input[0].witness = Witness::from_slice(&[
-            signature.serialize().to_vec(),
-            package.claim_script.clone(),
-            package.control_block.clone(),
-        ]);
-        tx
+        transaction.input[0].witness = recovery.witness(signature.serialize());
+        transaction
     }
 
     #[test]

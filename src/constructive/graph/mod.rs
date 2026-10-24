@@ -8,10 +8,12 @@
 //!
 //! - `successor_funding`: the `SuccessorFunding` role, which turns a confirmed deposit into the
 //!   beneficiary claims.
+//! - `claim_recovery`: the `Recovery` role, which spends one claim from its recovery package without
+//!   the Engine.
 //!
 //! Not implemented: `ExitRequest`, `Assert`, `Take` and `Disprove` (the dispute branch), and the
-//! `CooperativeSettle` and `Recovery` edges. `GRAPH-01` therefore stays open; this module reduces it
-//! by one edge rather than closing it.
+//! `CooperativeSettle` edge. `GRAPH-01` therefore stays open; this module reduces it edge by edge
+//! rather than closing it.
 //!
 //! # Authorization
 //!
@@ -39,4 +41,5 @@
 //! its own with its own review. Until such a gadget exists, a relation for this profile has to be
 //! paired with a graph whose signatures cover the statement, which is what these edges provide.
 
+pub mod claim_recovery;
 pub mod successor_funding;
