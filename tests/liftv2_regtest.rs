@@ -30,10 +30,10 @@ mod liftv2_regtest_tests {
     };
     use bitcoincore_rpc::{Auth, Client, RpcApi};
     use cube::constructive::contracts::fixed_split_vault_v1::claim::{
-        claim_scriptpubkey, parse_claim_script, parse_statement_op_return_script,
-        statement_op_return_script,
+        parse_claim_script, parse_statement_op_return_script,
     };
     use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
+    use cube::constructive::graph::successor_funding::{DepositAnchor, SuccessorFunding};
     use cube::constructive::taproot::TapRoot;
     use cube::constructive::txo::lift::lift_versions::liftv2::liftv2::return_liftv2_taproot;
     use cube::model::fixed_split_vault_v1::manifest::{
@@ -935,45 +935,22 @@ mod liftv2_regtest_tests {
         manifest.validate().expect("the manifest must be valid");
         let statement_digest = manifest.statement_digest();
 
-        // 6 Build the successor funding transaction: it spends the deposit cooperatively and pays
-        //   each beneficiary a claim output that commits to the statement.
-        let mut successor = Transaction {
-            version: bitcoin::transaction::Version::TWO,
-            lock_time: LockTime::ZERO,
-            input: vec![TxIn {
-                previous_output: deposit_outpoint,
-                script_sig: ScriptBuf::new(),
-                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
-                witness: Witness::new(),
-            }],
-            output: vec![
-                TxOut {
-                    value: Amount::from_sat(amounts.bob_sats),
-                    script_pubkey: ScriptBuf::from_bytes(
-                        claim_scriptpubkey(statement_digest, bob_key).expect("bob claim spk"),
-                    ),
-                },
-                TxOut {
-                    value: Amount::from_sat(amounts.carol_sats),
-                    script_pubkey: ScriptBuf::from_bytes(
-                        claim_scriptpubkey(statement_digest, carol_key).expect("carol claim spk"),
-                    ),
-                },
-                TxOut {
-                    value: Amount::from_sat(execution_fee_sats),
-                    script_pubkey: address_to_script(
-                        &rpc.call::<String>("getnewaddress", &[])
-                            .expect("fee address"),
-                    ),
-                },
-                TxOut {
-                    value: Amount::from_sat(0),
-                    script_pubkey: ScriptBuf::from_bytes(statement_op_return_script(
-                        statement_digest,
-                    )),
-                },
-            ],
-        };
+        // 6 Build the successor funding through the graph rule: it spends the deposit
+        //   cooperatively and pays every obligation in manifest order. `new` runs the same verifier
+        //   a signer runs, so an unfundable successor cannot reach the signing step.
+        let fee_script = address_to_script(
+            &rpc.call::<String>("getnewaddress", &[])
+                .expect("fee address"),
+        );
+        let funding = SuccessorFunding::new(
+            &manifest,
+            DepositAnchor::new(deposit_outpoint, deposit_prevout.value.to_sat()),
+            NETWORK_FEE_RESERVE,
+            Some(fee_script),
+        )
+        .expect("the successor must fund every manifest obligation");
+        assert_eq!(funding.statement_digest(), statement_digest);
+        let mut successor = funding.transaction();
 
         // 6.a Sign the key path of the deposit with MuSig2.
         let sighash = SighashCache::new(&successor)

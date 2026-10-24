@@ -2,6 +2,7 @@ pub mod bitcoiny;
 pub mod contracts;
 pub mod core_types;
 pub mod entries;
+pub mod graph;
 pub mod txout_types;
 
 pub use entries as entry;
