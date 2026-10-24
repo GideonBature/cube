@@ -20,8 +20,8 @@
 use crate::fund_split::FundSplitCircuit;
 use ark_bn254::Bn254;
 use ark_groth16::{Groth16, Proof, ProvingKey, VerifyingKey};
-use ark_std::rand::Rng;
 use ark_relations::r1cs::SynthesisError;
+use ark_std::rand::Rng;
 
 /// The proving key type of the `FundSplit` relation.
 pub type FundSplitProvingKey = ProvingKey<Bn254>;

@@ -3,12 +3,14 @@
 //!
 //! This is the first chain where all the pieces meet: the circuit binds the manifest, Groth16
 //! produces a proof, the adapter converts the verifying key into Argo's equation, and the table
-//! decides. It is `#[ignore]`d because setup and proving over 413k constraints plus garbling are
-//! minutes even in release:
+//! decides. It is `#[ignore]`d because setup, proving and garbling are slow in a debug build:
 //!
 //! ```text
 //! cargo test -p cube-proof --release --test proof_to_argo -- --ignored --nocapture
 //! ```
+//!
+//! Measured in release on an aarch64 laptop: setup 2.9 s, prove 2.0 s, garble 0.8 s, whole test
+//! 8.2 s. Debug multiplies the cryptographic work by a large factor, so the test stays opt-in.
 //!
 //! The setup is a single-party **trusted test setup**: this test proves the integration, not a
 //! deployment.
