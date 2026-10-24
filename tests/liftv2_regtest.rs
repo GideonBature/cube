@@ -18,25 +18,34 @@
 //! What is *not* covered: the MuSig2 key-path spend, the successor handover, and the dispute
 //! branches. Those remain open.
 
+mod common;
+
 #[cfg(test)]
 mod liftv2_regtest_tests {
     use bitcoin::absolute::LockTime;
     use bitcoin::hashes::Hash;
-    use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey};
+    use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey, XOnlyPublicKey};
     use bitcoin::sighash::{Prevouts, SighashCache, TapSighashType};
-    use bitcoin::taproot::{TapLeafHash, TapNodeHash};
+    use bitcoin::taproot::{TapLeafHash, TapNodeHash, TapTweakHash};
     use bitcoin::{
-        Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
+        Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Txid,
+        Witness,
     };
-    use bitcoincore_rpc::{Auth, Client, RpcApi};
+    use bitcoincore_rpc::{Client, RpcApi};
     use cube::constructive::contracts::fixed_split_vault_v1::claim::{
         assertion_claim_scriptpubkey, parse_claim_script, parse_statement_op_return_script,
         statement_op_return_script,
     };
     use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
-    use cube::constructive::graph::assertion::{disclosure_secret_commitment, AssertionTerms};
+    use cube::constructive::graph::assertion::{
+        disclosure_secret_commitment, Assertion, AssertionAnchor, AssertionClaim, AssertionTerms,
+        ContestedOutput, DisproveSpend,
+    };
     use cube::constructive::graph::claim_recovery::ClaimRecovery;
-    use cube::constructive::graph::successor_funding::{DepositAnchor, SuccessorFunding};
+    use cube::constructive::graph::cooperative_settle::{CooperativeSettle, SETTLE_INPUT_SEQUENCE};
+    use cube::constructive::graph::successor_funding::{
+        DepositAnchor, FeeBounds, SuccessorFunding,
+    };
     use cube::constructive::taproot::TapRoot;
     use cube::constructive::txo::lift::lift_versions::liftv2::liftv2::return_liftv2_taproot;
     use cube::model::fixed_split_vault_v1::manifest::{
@@ -53,7 +62,6 @@ mod liftv2_regtest_tests {
     use cube::transmutative::secp::schnorr::{self, SchnorrSigningMode};
     use secp::{Point, Scalar};
     use serde_json::json;
-    use std::path::PathBuf;
 
     /// The relative timelock the LiftV2 refund branch commits to, in blocks.
     const REFUND_DELAY_BLOCKS: u16 = 12_960;
@@ -204,7 +212,7 @@ mod liftv2_regtest_tests {
     #[test]
     fn liftv2_refund_is_rejected_before_maturity_and_accepted_after() {
         // 1 Skip when no regtest node is configured.
-        let Some(rpc) = regtest_client() else {
+        let Some(rpc) = crate::common::client(None) else {
             println!(
                 "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
             );
@@ -335,22 +343,6 @@ mod liftv2_regtest_tests {
             "the refund output must be confirmed and unspent"
         );
         println!("mature refund accepted in {}", accepted);
-    }
-
-    /// Returns a client for the configured regtest node, or `None`.
-    fn regtest_client() -> Option<Client> {
-        let datadir = std::env::var("CUBE_REGTEST_DATADIR").ok()?;
-        if datadir.trim().is_empty() {
-            return None;
-        }
-
-        let port = std::env::var("CUBE_REGTEST_RPC_PORT").unwrap_or_else(|_| "18443".to_string());
-        let cookie = PathBuf::from(&datadir).join("regtest/.cookie");
-        Client::new(
-            &format!("http://127.0.0.1:{port}"),
-            Auth::CookieFile(cookie),
-        )
-        .ok()
     }
 
     /// Parses an address from the node into a scriptpubkey.
@@ -595,7 +587,7 @@ mod liftv2_regtest_tests {
     #[test]
     fn liftv2_cooperative_key_path_spend_on_regtest() {
         // 1 Skip when no regtest node is configured.
-        let Some(rpc) = regtest_client() else {
+        let Some(rpc) = crate::common::client(None) else {
             println!(
                 "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
             );
@@ -773,7 +765,7 @@ mod liftv2_regtest_tests {
     #[test]
     fn successor_funding_binds_the_statement_and_the_beneficiary_claims() {
         // 1 Skip without a node.
-        let Some(rpc) = regtest_client() else {
+        let Some(rpc) = crate::common::client(None) else {
             println!(
                 "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
             );
@@ -1175,5 +1167,557 @@ mod liftv2_regtest_tests {
         );
         assert_eq!(revealed_key, bob_key);
         println!("successor funding {successor_txid}, Bob's claim {bob_spend_txid}");
+    }
+
+    /// Prepares the shared wallet and returns a mining address.
+    fn node_wallet(rpc: &Client) -> String {
+        if rpc
+            .call::<serde_json::Value>("createwallet", &[json!("cube_liftv2")])
+            .is_err()
+        {
+            let _ = rpc.call::<serde_json::Value>("loadwallet", &[json!("cube_liftv2")]);
+        }
+        let mining_address: String = rpc.call("getnewaddress", &[]).expect("getnewaddress");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(101), json!(mining_address)])
+            .expect("mature coinbase");
+        mining_address
+    }
+
+    /// Signs a digest with a raw BIP-340 secret.
+    fn sign_digest(digest: [u8; 32], secret: [u8; 32]) -> [u8; 64] {
+        let secp = Secp256k1::new();
+        secp.sign_schnorr_no_aux_rand(
+            &Message::from_digest(digest),
+            &Keypair::from_secret_key(&secp, &SecretKey::from_slice(&secret).expect("key")),
+        )
+        .serialize()
+    }
+
+    /// Finds a wallet transaction output worth `value_sats`.
+    fn wallet_output(rpc: &Client, txid: &str, value_sats: u64) -> (OutPoint, TxOut) {
+        let wallet_tx: serde_json::Value = rpc
+            .call("gettransaction", &[json!(txid), json!(true)])
+            .expect("gettransaction");
+        let tx: Transaction = bitcoin::consensus::deserialize(
+            &hex::decode(wallet_tx["hex"].as_str().expect("hex")).expect("hex decode"),
+        )
+        .expect("transaction");
+        for (vout, output) in tx.output.iter().enumerate() {
+            if output.value.to_sat() == value_sats {
+                return (
+                    OutPoint {
+                        txid: txid.parse().expect("txid"),
+                        vout: vout as u32,
+                    },
+                    output.clone(),
+                );
+            }
+        }
+        panic!("the transaction has no output worth {value_sats} sats");
+    }
+
+    /// Reads a mined transaction from the block that contains it, without a txindex.
+    fn mined_transaction(rpc: &Client, txid: Txid) -> Transaction {
+        let block_hash: String = rpc
+            .call(
+                "getblockhash",
+                &[json!(rpc
+                    .call::<u64>("getblockcount", &[])
+                    .expect("height"))],
+            )
+            .expect("block hash");
+        let block: serde_json::Value = rpc
+            .call("getblock", &[json!(block_hash), json!(2)])
+            .expect("getblock");
+        let tx = block["tx"]
+            .as_array()
+            .expect("tx array")
+            .iter()
+            .find(|tx| tx["txid"] == json!(txid))
+            .expect("the transaction must be in the block");
+        bitcoin::consensus::deserialize(
+            &hex::decode(tx["hex"].as_str().expect("hex")).expect("hex decode"),
+        )
+        .expect("transaction")
+    }
+
+    /// A settled v2 tree funded through a real LiftV2 deposit.
+    struct V2Tree {
+        manifest: TransitionManifest,
+        bob_terms: AssertionTerms,
+        carol_terms: AssertionTerms,
+        bob_amount: u64,
+        carol_amount: u64,
+        successor_txid: Txid,
+        bob_claim_prevout: TxOut,
+        carol_claim_prevout: TxOut,
+    }
+
+    /// Runs the reference model and publishes a successor with two v2 claims.
+    fn fund_v2_tree(rpc: &Client, mining_address: &str) -> V2Tree {
+        // 1 Fund the LiftV2 deposit through its script-path address.
+        let taproot = liftv2_taproot();
+        let deposit_spk = ScriptBuf::from_bytes(taproot.spk().expect("spk"));
+        let deposit_address =
+            Address::from_script(&deposit_spk, Network::Regtest).expect("valid address");
+        let funding_txid: String = rpc
+            .call(
+                "sendtoaddress",
+                &[json!(deposit_address.to_string()), json!(0.5)],
+            )
+            .expect("sendtoaddress");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm deposit");
+        let wallet_tx: serde_json::Value = rpc
+            .call("gettransaction", &[json!(funding_txid), json!(true)])
+            .expect("gettransaction");
+        let deposit_tx: Transaction = bitcoin::consensus::deserialize(
+            &hex::decode(wallet_tx["hex"].as_str().expect("hex")).expect("hex decode"),
+        )
+        .expect("transaction");
+        let (deposit_vout, deposit_prevout) = deposit_tx
+            .output
+            .iter()
+            .enumerate()
+            .find(|(_, output)| output.script_pubkey == deposit_spk)
+            .map(|(index, output)| (index as u32, output.clone()))
+            .expect("the deposit output must be present");
+        let deposit_outpoint = OutPoint {
+            txid: deposit_tx.compute_txid(),
+            vout: deposit_vout,
+        };
+
+        // 2 Run the reference model to derive the manifest.
+        const NETWORK_FEE_RESERVE: u64 = 2_000;
+        let gross_sats = deposit_prevout.value.to_sat() - NETWORK_FEE_RESERVE;
+        let execution_fee_sats: u64 = 5_000;
+        let amounts = split_amounts(gross_sats, execution_fee_sats).expect("valid split");
+        let bob_key = xonly_of(BOB_SECRET);
+        let carol_key = xonly_of(CAROL_SECRET);
+        let fee_key = [0x66u8; 32];
+        let descriptor = SplitDescriptor::new(
+            [0x11; 32],
+            [0x22; 32],
+            alice_xonly(),
+            bob_key,
+            carol_key,
+            fee_key,
+        );
+        let mut vault = SplitVault::new(Ledger::new(gross_sats, 0, 0, 0));
+        vault
+            .instantiate(
+                descriptor,
+                ModelAuth::new(Role::Owner, 1),
+                Operation::new(
+                    SplitVault::next_operation_id(1),
+                    SplitVault::payload_digest(b"instantiate"),
+                ),
+            )
+            .expect("model instantiate");
+        let parent_digest = vault.state_digest();
+        vault
+            .fund(
+                gross_sats,
+                execution_fee_sats,
+                ModelAuth::new(Role::Owner, 2),
+                Operation::new(
+                    SplitVault::next_operation_id(2),
+                    SplitVault::payload_digest(b"fund"),
+                ),
+            )
+            .expect("model fund");
+        let resulting_digest = vault.state_digest();
+        let manifest = TransitionManifest {
+            schema_version: MANIFEST_SCHEMA_VERSION,
+            profile: ReleaseProfile::ArgoSplitRegtest,
+            network_genesis_hash: [0x11; 32],
+            template_hash: cube::constructive::contracts::fixed_split_vault_v1::template_hash(),
+            circuit_id: [0x33; 32],
+            verifier_key_digest: [0x44; 32],
+            previous_state_digest: parent_digest,
+            resulting_state_digest: resulting_digest,
+            batch_sequence: 1,
+            anchors: vec![Anchor::new(
+                deposit_outpoint.txid.to_byte_array(),
+                deposit_outpoint.vout,
+            )],
+            entry_digest: [0x55; 32],
+            caller_key: alice_xonly(),
+            caller_sequence: 2,
+            operation_id: [0x66; 32],
+            payouts: vec![
+                Payout::new(bob_key, amounts.bob_sats, PayoutKind::BeneficiaryAllocation),
+                Payout::new(
+                    carol_key,
+                    amounts.carol_sats,
+                    PayoutKind::BeneficiaryAllocation,
+                ),
+                Payout::new(fee_key, execution_fee_sats, PayoutKind::ExecutionFee),
+            ],
+            setup_instance_id: [0x77; 32],
+            graph_template_version: 1,
+            challenge_config_digest: [0x88; 32],
+            recovery_package_digest: [0x99; 32],
+            batch_data_digest: [0xaa; 32],
+            availability_descriptor_digest: [0xbb; 32],
+        };
+        manifest.validate().expect("the manifest must be valid");
+        let statement_digest = manifest.statement_digest();
+
+        // 3 Bind both claims and publish the successor through the MuSig2 key path.
+        let bob_terms = AssertionTerms {
+            statement_digest,
+            claim_id: [0x71; 32],
+            setup_instance_id: [0x77; 16],
+            verifier_key_identity: [0x44; 32],
+            table_digest: [0x45; 32],
+            secret_commitment: disclosure_secret_commitment(&[0x46; 32]),
+            input_digest: [0x47; 32],
+            challenge_blocks: 144,
+            operator_key: [0x31; 32],
+            beneficiary_key: bob_key,
+        };
+        let carol_terms = AssertionTerms {
+            claim_id: [0x72; 32],
+            beneficiary_key: carol_key,
+            ..bob_terms.clone()
+        };
+        let bindings = [bob_terms.binding_digest(), carol_terms.binding_digest()];
+        let fee_script = address_to_script(
+            &rpc.call::<String>("getnewaddress", &[])
+                .expect("fee address"),
+        );
+        let funding = SuccessorFunding::new_with_assertions(
+            &manifest,
+            DepositAnchor::new(deposit_outpoint, deposit_prevout.value.to_sat()),
+            NETWORK_FEE_RESERVE,
+            Some(fee_script),
+            &bindings,
+        )
+        .expect("the successor must fund every obligation");
+        let mut successor = funding.transaction();
+        let sighash = SighashCache::new(&successor)
+            .taproot_signature_hash(
+                0,
+                &Prevouts::All(std::slice::from_ref(&deposit_prevout)),
+                None,
+                None,
+                TapSighashType::Default,
+            )
+            .expect("sighash");
+        let (signature, _) = liftv2_musig_sign(&taproot, sighash.to_byte_array());
+        successor.input[0].witness = Witness::from_slice(&[signature.to_vec()]);
+        let _: String = rpc
+            .call(
+                "sendrawtransaction",
+                &[json!(bitcoin::consensus::encode::serialize_hex(&successor))],
+            )
+            .expect("the successor must be accepted");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm successor");
+
+        V2Tree {
+            manifest,
+            bob_terms,
+            carol_terms,
+            bob_amount: amounts.bob_sats,
+            carol_amount: amounts.carol_sats,
+            successor_txid: successor.compute_txid(),
+            bob_claim_prevout: successor.output[0].clone(),
+            carol_claim_prevout: successor.output[1].clone(),
+        }
+    }
+
+    /// Builds the v2 package for one claim of the tree.
+    fn v2_package(
+        manifest: &TransitionManifest,
+        terms: &AssertionTerms,
+        amount_sats: u64,
+        claim_txid: Txid,
+        vout: u32,
+    ) -> ClaimRecoveryPackage {
+        ClaimRecoveryPackage::new_with_assertion(
+            ReleaseProfile::ArgoSplitRegtest,
+            terms.claim_id,
+            None,
+            terms.beneficiary_key,
+            manifest.template_hash,
+            manifest.circuit_id,
+            manifest.statement_digest(),
+            terms.binding_digest(),
+            amount_sats,
+            Some(Anchor::new(claim_txid.to_byte_array(), vout)),
+            432,
+            10,
+            manifest.setup_instance_id,
+            manifest.challenge_config_digest,
+        )
+        .expect("the v2 package must construct")
+    }
+
+    #[test]
+    fn composed_graph_cooperative_settlement_closes_both_claims() {
+        let Some(rpc) = crate::common::client(None) else {
+            println!(
+                "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
+            );
+            return;
+        };
+        let _node_guard = node_test_guard();
+        let mining_address = node_wallet(&rpc);
+        let tree = fund_v2_tree(&rpc, &mining_address);
+
+        let packages = vec![
+            v2_package(
+                &tree.manifest,
+                &tree.bob_terms,
+                tree.bob_amount,
+                tree.successor_txid,
+                0,
+            ),
+            v2_package(
+                &tree.manifest,
+                &tree.carol_terms,
+                tree.carol_amount,
+                tree.successor_txid,
+                1,
+            ),
+        ];
+        let destinations = vec![
+            address_to_script(&rpc.call::<String>("getnewaddress", &[]).expect("bob dest")),
+            address_to_script(
+                &rpc.call::<String>("getnewaddress", &[])
+                    .expect("carol dest"),
+            ),
+        ];
+
+        // A P2TR fee input funded from the wallet; Alice signs its key path.
+        let secp = Secp256k1::new();
+        let fee_key =
+            Keypair::from_secret_key(&secp, &SecretKey::from_slice(&ALICE_SECRET).expect("key"));
+        let fee_xonly = XOnlyPublicKey::from_slice(&alice_xonly()).expect("xonly");
+        let fee_address = Address::p2tr(&secp, fee_xonly, None, Network::Regtest);
+        let fee_txid: String = rpc
+            .call(
+                "sendtoaddress",
+                &[
+                    json!(fee_address.to_string()),
+                    json!(2_000.0 / 100_000_000.0),
+                ],
+            )
+            .expect("fund the fee input");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm the fee input");
+        let (fee_outpoint, fee_prevout) = wallet_output(&rpc, &fee_txid, 2_000);
+
+        let settlement = CooperativeSettle::new(
+            &tree.manifest,
+            &packages,
+            destinations.clone(),
+            fee_outpoint,
+            &fee_prevout,
+            FeeBounds::new(2_000, 2_000),
+        )
+        .expect("settlement");
+        let prevouts = [
+            tree.bob_claim_prevout.clone(),
+            tree.carol_claim_prevout.clone(),
+            fee_prevout.clone(),
+        ];
+        let mut transaction = settlement.transaction();
+        for (index, secret) in [BOB_SECRET, CAROL_SECRET].iter().enumerate() {
+            let sighash = settlement
+                .claim_signing_hash(index, &prevouts)
+                .expect("claim sighash");
+            transaction.input[index].witness = settlement
+                .claim_witness(index, sign_digest(sighash, *secret))
+                .expect("claim witness");
+        }
+        let fee_sighash = SighashCache::new(&transaction)
+            .taproot_signature_hash(
+                2,
+                &Prevouts::All(&prevouts),
+                None,
+                None,
+                TapSighashType::Default,
+            )
+            .expect("fee sighash");
+        let fee_tweak = TapTweakHash::from_key_and_tweak(fee_xonly, None).to_scalar();
+        let fee_signer = fee_key
+            .add_xonly_tweak(&secp, &fee_tweak)
+            .expect("tweaked fee key");
+        let fee_signature = secp.sign_schnorr_no_aux_rand(
+            &Message::from_digest(fee_sighash.to_byte_array()),
+            &fee_signer,
+        );
+        transaction.input[2].witness = Witness::from_slice(&[fee_signature.serialize().to_vec()]);
+
+        let txid: String = rpc
+            .call(
+                "sendrawtransaction",
+                &[json!(bitcoin::consensus::encode::serialize_hex(
+                    &transaction
+                ))],
+            )
+            .expect("the settlement must be accepted");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm the settlement");
+        let mined = mined_transaction(&rpc, txid.parse().expect("txid"));
+        assert_eq!(mined.output[0].value, Amount::from_sat(tree.bob_amount));
+        assert_eq!(mined.output[0].script_pubkey, destinations[0]);
+        assert_eq!(mined.output[1].value, Amount::from_sat(tree.carol_amount));
+        assert_eq!(mined.output[1].script_pubkey, destinations[1]);
+        assert_eq!(mined.input.len(), 3);
+        for index in 0..2 {
+            assert_eq!(mined.input[index].previous_output.txid, tree.successor_txid);
+            assert_eq!(mined.input[index].previous_output.vout, index as u32);
+            assert_eq!(mined.input[index].sequence, SETTLE_INPUT_SEQUENCE);
+        }
+        println!("cooperative settlement {txid} paid both v2 claims");
+    }
+
+    #[test]
+    fn composed_graph_dispute_and_recovery_use_no_engine_signature() {
+        let Some(rpc) = crate::common::client(None) else {
+            println!(
+                "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
+            );
+            return;
+        };
+        let _node_guard = node_test_guard();
+        let mining_address = node_wallet(&rpc);
+        let tree = fund_v2_tree(&rpc, &mining_address);
+
+        // 1 Bob asserts the first claim. The Engine is not asked for a signature.
+        let assertion = Assertion::new(
+            tree.bob_terms.clone(),
+            ContestedOutput {
+                outpoint: OutPoint {
+                    txid: tree.successor_txid,
+                    vout: 0,
+                },
+                value_sats: tree.bob_amount,
+            },
+            1_000,
+        )
+        .expect("assertion");
+        let claim = AssertionClaim::new(
+            tree.manifest.statement_digest(),
+            tree.bob_terms.binding_digest(),
+            tree.bob_terms.beneficiary_key,
+        )
+        .expect("claim");
+        let mut assert_tx = assertion.transaction(Witness::new()).expect("assert tx");
+        let sighash = claim
+            .assert_signing_hash(&assert_tx, &tree.bob_claim_prevout)
+            .expect("assert sighash");
+        assert_tx.input[0].witness = claim
+            .assert_witness(sign_digest(sighash, BOB_SECRET))
+            .expect("claim witness");
+        let assert_txid: String = rpc
+            .call(
+                "sendrawtransaction",
+                &[json!(bitcoin::consensus::encode::serialize_hex(&assert_tx))],
+            )
+            .expect("the assertion must be accepted");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm assertion");
+        let assert_txid: Txid = assert_txid.parse().expect("txid");
+
+        // 2 Bob disproves with the instance secret. Still no Engine signature.
+        let assertion_prevout = TxOut {
+            value: Amount::from_sat(tree.bob_amount - 1_000),
+            script_pubkey: assertion.scriptpubkey().expect("assertion spk"),
+        };
+        let bob_destination =
+            address_to_script(&rpc.call::<String>("getnewaddress", &[]).expect("bob dest"));
+        let disprove = DisproveSpend::new(
+            &assertion,
+            AssertionAnchor::new(
+                OutPoint {
+                    txid: assert_txid,
+                    vout: 0,
+                },
+                tree.bob_amount - 1_000,
+            ),
+            [0x46; 32],
+            bob_destination.clone(),
+            500,
+        )
+        .expect("disprove");
+        let mut disprove_tx = disprove.transaction();
+        let sighash = disprove
+            .signing_hash(&assertion_prevout)
+            .expect("disprove sighash");
+        disprove_tx.input[0].witness = disprove
+            .witness(sign_digest(sighash, BOB_SECRET))
+            .expect("disprove witness");
+        let disprove_txid: String = rpc
+            .call(
+                "sendrawtransaction",
+                &[json!(bitcoin::consensus::encode::serialize_hex(
+                    &disprove_tx
+                ))],
+            )
+            .expect("the disprove must be accepted");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm disprove");
+        let mined = mined_transaction(&rpc, disprove_txid.parse().expect("txid"));
+        assert_eq!(
+            mined.output[0].value,
+            Amount::from_sat(tree.bob_amount - 1_500)
+        );
+        assert_eq!(mined.output[0].script_pubkey, bob_destination);
+
+        // 3 Carol recovers her own claim through the v2 package. Still no Engine signature.
+        let package = v2_package(
+            &tree.manifest,
+            &tree.carol_terms,
+            tree.carol_amount,
+            tree.successor_txid,
+            1,
+        );
+        let carol_destination = address_to_script(
+            &rpc.call::<String>("getnewaddress", &[])
+                .expect("carol dest"),
+        );
+        let recovery = ClaimRecovery::new(
+            &package,
+            &tree.carol_claim_prevout,
+            carol_destination.clone(),
+            500,
+        )
+        .expect("recovery");
+        let sighash = recovery
+            .signing_hash(&tree.carol_claim_prevout)
+            .expect("recovery sighash");
+        let mut recovery_tx = recovery.transaction();
+        recovery_tx.input[0].witness = recovery.witness(sign_digest(sighash, CAROL_SECRET));
+        let recovery_txid: String = rpc
+            .call(
+                "sendrawtransaction",
+                &[json!(bitcoin::consensus::encode::serialize_hex(
+                    &recovery_tx
+                ))],
+            )
+            .expect("the recovery must be accepted");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm recovery");
+        let mined = mined_transaction(&rpc, recovery_txid.parse().expect("txid"));
+        assert_eq!(
+            mined.output[0].value,
+            Amount::from_sat(tree.carol_amount - 500)
+        );
+        assert_eq!(mined.output[0].script_pubkey, carol_destination);
+
+        println!("dispute {disprove_txid} paid Bob, recovery {recovery_txid} paid Carol");
     }
 }

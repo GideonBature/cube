@@ -55,6 +55,16 @@ uint = { version = "0.9", default-features = false }
 zeroize = "1.8.2"
 bincode = { version = "2", features = ["serde"] }
 
+# Node-backed proof integration tests cross the application/Argo boundary through bytes. These
+# crates use arkworks 0.5, a separate tree from the application's 0.4.2 dependency; no type is
+# shared across the boundary.
+[dev-dependencies]
+ark-bn254 = "0.5.0"
+ark-ff = "0.5.0"
+ark-std = { version = "0.5.0", features = ["getrandom"] }
+cube-argo = { path = "crates/cube-argo" }
+cube-proof = { path = "crates/cube-proof" }
+
 [lib]
 name = "cube"
 path = "src/lib.rs"

@@ -9,11 +9,13 @@
 //!
 //! Gated on `CUBE_REGTEST_DATADIR`; skips cleanly without a node.
 
+mod common;
+
 mod successor_v2_regtest {
     use bitcoin::hashes::Hash;
     use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey};
     use bitcoin::{Address, Amount, OutPoint, ScriptBuf, TxOut, Txid, Witness};
-    use bitcoincore_rpc::{Auth, Client, RpcApi};
+    use bitcoincore_rpc::{Client, RpcApi};
     use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
     use cube::constructive::contracts::fixed_split_vault_v1::{
         assertion_claim_scriptpubkey, template_hash,
@@ -30,7 +32,6 @@ mod successor_v2_regtest {
         Anchor, Payout, PayoutKind, ReleaseProfile, TransitionManifest, MANIFEST_SCHEMA_VERSION,
     };
     use serde_json::json;
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     const OPERATOR_SECRET: [u8; 32] = [0x31; 32];
@@ -46,23 +47,6 @@ mod successor_v2_regtest {
     const SPEND_FEE: u64 = 500;
     const CHALLENGE_BLOCKS: u32 = 144;
     const DEPOSIT_SATS: u64 = CLAIM_VALUE * 2 + SUCCESSOR_FEE + MINER_FEE;
-
-    fn regtest_client(wallet: Option<&str>) -> Option<Client> {
-        let datadir = std::env::var("CUBE_REGTEST_DATADIR").ok()?;
-        if datadir.trim().is_empty() {
-            return None;
-        }
-        let port = std::env::var("CUBE_REGTEST_RPC_PORT").unwrap_or_else(|_| "18443".to_string());
-        let cookie = PathBuf::from(&datadir).join("regtest/.cookie");
-        let path = wallet
-            .map(|name| format!("/wallet/{name}"))
-            .unwrap_or_default();
-        Client::new(
-            &format!("http://127.0.0.1:{port}{path}"),
-            Auth::CookieFile(cookie),
-        )
-        .ok()
-    }
 
     fn keypair(secret: [u8; 32]) -> Keypair {
         let secp = Secp256k1::new();
@@ -108,7 +92,7 @@ mod successor_v2_regtest {
 
     #[test]
     fn a_successor_creates_two_leaf_claims_that_keep_both_exits() {
-        let Some(base) = regtest_client(None) else {
+        let Some(base) = crate::common::client(None) else {
             println!(
                 "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
             );
@@ -122,8 +106,8 @@ mod successor_v2_regtest {
         {
             let _ = base.call::<serde_json::Value>("loadwallet", &[json!("cube_successor_v2")]);
         }
-        let rpc =
-            regtest_client(Some("cube_successor_v2")).expect("the wallet client must construct");
+        let rpc = crate::common::client(Some("cube_successor_v2"))
+            .expect("the wallet client must construct");
         let mining_address: String = rpc.call("getnewaddress", &[]).expect("getnewaddress");
         let _: Vec<String> = rpc
             .call("generatetoaddress", &[json!(101), json!(mining_address)])

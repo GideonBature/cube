@@ -179,10 +179,18 @@ through a successor, an `Assert`, a `Disprove` and a v2 recovery on regtest. `te
 also creates v2 claims through the real MuSig2 deposit path and recovers Bob's claim through a v2
 package. `CooperativeSettle` spends every beneficiary claim in one transaction to native
 destinations, with an external fee input; five offline tests and a regtest settlement of two v2
-claims exercise it, including rejection of a redirected output. BIND-01 remains open for a unilateral
-operator: Argo's MAC interface supplies no public input-label opening, so the assertion input is
-signed by the participant whose value is at stake. `GRAPH-01` stays open for the composed graph
-scenario.
+claims exercise it, including rejection of a redirected output. `tests/liftv2_regtest.rs` also runs
+two composed scenarios from the real LiftV2 deposit: a successor whose two v2 claims are
+cooperatively settled, and a successor whose first claim is asserted then disproved while the second
+is recovered through its v2 package, with no Engine signature after the successor. BIND-01 remains
+open for a unilateral operator: Argo's MAC interface supplies no public input-label opening, so the
+assertion input is signed by the participant whose value is at stake. `tests/proof_take_regtest.rs`
+(release, ignored by default) runs a real Groth16 proof through Argo's table, binds the
+authenticated input to a v2 claim, and takes the valid claim after the challenge window; the table
+discloses on a proof for another statement. `GRAPH-01` stays open for the remaining adversarial
+matrix, principally an invalid `Take` stopped through its on-chain conflict path. A containerised
+regtest node and a runner for every node-backed test are in `docker/regtest/` and
+`scripts/regtest.sh`.
 
 ## 6. Work package P2: reference contract model and canonical schema
 

@@ -182,7 +182,9 @@ tapscript cannot express without an additional construction.
   same. `tests/successor_v2_regtest.rs` runs the path on regtest: a wallet-funded deposit, a
   successor with two bindings, an `Assert` that is disproved, and a recovery through the v2
   package. The LiftV2 MuSig2 successor test also creates v2 claims and recovers Bob's claim through
-  a v2 package, so the production deposit path is covered.
+  a v2 package, so the production deposit path is covered. Two composed scenarios in the same test
+  run a full deposit -> successor -> cooperative settlement, and a deposit -> successor -> Assert ->
+  Disprove plus independent recovery, with no Engine signature after the successor.
 - **Claim v2 recovery.** The assertion leaf changes the claim taproot. `ClaimRecoveryPackage`
   schema v2 now carries the binding and the two-leaf recovery control block, so the recovery path
   survives; v1 packages still describe single-leaf claims. `tests/assertion_regtest.rs` funds a
@@ -194,5 +196,10 @@ tapscript cannot express without an additional construction.
 - **Setup security.** One-time instances, participant-scoped setup transcripts, the malicious
   security variant and the secret's entropy are separate `P5` work. A test setup is not a
   production setup.
+- **Valid-take evidence.** `tests/proof_take_regtest.rs` (release, ignored by default) runs a real
+  Groth16 proof through Argo's table, binds the authenticated input to a v2 claim, and takes the
+  valid claim after the challenge window. A proof for another statement is `Disclosed`. The
+  remaining graph gap is an invalid `Take` stopped through its on-chain conflict path, not the
+  validity of the table verdict.
 - **In-circuit authorization.** The relation still does not verify BIP-340; the graph signatures
   are the authorization, as recorded in `src/constructive/graph/mod.rs`.

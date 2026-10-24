@@ -24,8 +24,10 @@
 //! Not implemented: nothing from the required role table is outstanding except the unilateral
 //! operator profile for `Assert` (a two-leaf claim keeps its recovery branch in a v2
 //! `ClaimRecoveryPackage`; `SuccessorFunding::new_with_assertions` can emit that shape). The v1
-//! package continues to describe the single-leaf claim. `GRAPH-01` still stays open because the
-//! complete graph has not been exercised as one composed scenario.
+//! package continues to describe the single-leaf claim. `GRAPH-01` still stays open for the
+//! remaining scenario matrix, principally an invalid `Take` stopped through its on-chain conflict
+//! path. The valid `Take` backed by a real evaluated proof is in `tests/proof_take_regtest.rs`; the
+//! composed deposit -> successor -> settle/dispute/recover scenarios are in `tests/liftv2_regtest.rs`.
 //!
 //! # Authorization
 //!

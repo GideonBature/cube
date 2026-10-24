@@ -4,13 +4,15 @@
 //! and shows that Bitcoin accepts the honest spends and rejects premature, redirected and
 //! wrong-secret ones. It is gated on `CUBE_REGTEST_DATADIR` and skips cleanly without a node.
 
+mod common;
+
 mod assertion_regtest {
     use bitcoin::hashes::Hash;
     use bitcoin::secp256k1::{Keypair, Message, Secp256k1, SecretKey};
     use bitcoin::sighash::{Prevouts, SighashCache, TapSighashType};
     use bitcoin::taproot::TapLeafHash;
     use bitcoin::{Address, Amount, Network, OutPoint, TxOut, Txid, Witness};
-    use bitcoincore_rpc::{Auth, Client, RpcApi};
+    use bitcoincore_rpc::{Client, RpcApi};
     use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
     use cube::constructive::graph::assertion::{
         disclosure_secret_commitment, Assertion, AssertionAnchor, AssertionClaim, AssertionTerms,
@@ -20,7 +22,6 @@ mod assertion_regtest {
     use cube::model::fixed_split_vault_v1::manifest::Anchor;
     use cube::model::fixed_split_vault_v1::ReleaseProfile;
     use serde_json::json;
-    use std::path::PathBuf;
     use std::str::FromStr;
 
     const OPERATOR_SECRET: [u8; 32] = [0x31; 32];
@@ -33,23 +34,6 @@ mod assertion_regtest {
     const ASSERT_FEE: u64 = 1_000;
     const SPEND_FEE: u64 = 500;
     const CHALLENGE_BLOCKS: u32 = 144;
-
-    fn regtest_client(wallet: Option<&str>) -> Option<Client> {
-        let datadir = std::env::var("CUBE_REGTEST_DATADIR").ok()?;
-        if datadir.trim().is_empty() {
-            return None;
-        }
-        let port = std::env::var("CUBE_REGTEST_RPC_PORT").unwrap_or_else(|_| "18443".to_string());
-        let cookie = PathBuf::from(&datadir).join("regtest/.cookie");
-        let path = wallet
-            .map(|name| format!("/wallet/{name}"))
-            .unwrap_or_default();
-        Client::new(
-            &format!("http://127.0.0.1:{port}{path}"),
-            Auth::CookieFile(cookie),
-        )
-        .ok()
-    }
 
     fn keypair(secret: [u8; 32]) -> Keypair {
         let secp = Secp256k1::new();
@@ -95,7 +79,7 @@ mod assertion_regtest {
 
     #[test]
     fn assertion_take_and_disprove_are_enforced_on_regtest() {
-        let Some(base) = regtest_client(None) else {
+        let Some(base) = crate::common::client(None) else {
             println!(
                 "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
             );
@@ -109,7 +93,8 @@ mod assertion_regtest {
         {
             let _ = base.call::<serde_json::Value>("loadwallet", &[json!("cube_assertion")]);
         }
-        let rpc = regtest_client(Some("cube_assertion")).expect("the wallet client must construct");
+        let rpc = crate::common::client(Some("cube_assertion"))
+            .expect("the wallet client must construct");
         let mining_address: String = rpc.call("getnewaddress", &[]).expect("getnewaddress");
         let _: Vec<String> = rpc
             .call("generatetoaddress", &[json!(101), json!(mining_address)])
