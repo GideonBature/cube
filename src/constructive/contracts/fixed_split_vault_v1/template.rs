@@ -8,7 +8,8 @@ use crate::executive::opcode::opcodes::altstack::{
     op_fromaltstack::OP_FROMALTSTACK, op_toaltstack::OP_TOALTSTACK,
 };
 use crate::executive::opcode::opcodes::arithmetic::{
-    op_div::OP_DIV, op_mul::OP_MUL, op_not::OP_NOT, op_sub::OP_SUB,
+    op_add::OP_ADD, op_div::OP_DIV, op_mul::OP_MUL, op_not::OP_NOT, op_sub::OP_SUB,
+    op_within::OP_WITHIN,
 };
 use crate::executive::opcode::opcodes::bitwise::op_equal::OP_EQUAL;
 use crate::executive::opcode::opcodes::callinfo::op_caller::OP_CALLER;
@@ -18,7 +19,8 @@ use crate::executive::opcode::opcodes::coin::{
 use crate::executive::opcode::opcodes::flow::{op_returnall::OP_RETURNALL, op_verify::OP_VERIFY};
 use crate::executive::opcode::opcodes::memory::{op_mread::OP_MREAD, op_mwrite::OP_MWRITE};
 use crate::executive::opcode::opcodes::push::{
-    op_10::OP_10, op_2::OP_2, op_3::OP_3, op_7::OP_7, op_false::OP_FALSE, op_true::OP_TRUE,
+    op_10::OP_10, op_14::OP_14, op_2::OP_2, op_3::OP_3, op_7::OP_7, op_false::OP_FALSE,
+    op_true::OP_TRUE,
 };
 use crate::executive::opcode::opcodes::shadowing::{
     op_shadow_alloc::OP_SHADOW_ALLOC, op_shadow_alloc_val::OP_SHADOW_ALLOC_VAL,
@@ -28,6 +30,7 @@ use crate::executive::opcode::opcodes::shadowing::{
 use crate::executive::opcode::opcodes::stack::{
     op_2drop::OP_2DROP, op_drop::OP_DROP, op_dup::OP_DUP, op_pick::OP_PICK,
 };
+use crate::executive::opcode::opcodes::storage::{op_sread::OP_SREAD, op_swrite::OP_SWRITE};
 
 /// The program name of the allowlisted template.
 pub const PROGRAM_NAME: &str = "fixed_split_vault_v1";
@@ -57,6 +60,21 @@ pub const MEMORY_SLOT_B: u8 = 0x02;
 
 /// Contract memory slot holding `C`, Carol's allocation.
 pub const MEMORY_SLOT_C: u8 = 0x03;
+
+/// Contract **state** key holding the lifecycle phase.
+///
+/// Contract memory is per-call scratch space; contract state is what survives between calls. The
+/// phase therefore lives in state, keyed by this byte.
+pub const STATE_KEY_PHASE: u8 = 0x0e;
+
+/// Phase value: `FundSplit` has allocated both shares.
+pub const PHASE_ALLOCATED: u8 = 0x01;
+
+/// Phase value: one beneficiary has redeemed, the other has not.
+pub const PHASE_PARTIALLY_REDEEMED: u8 = 0x02;
+
+/// Phase value: both beneficiaries have redeemed. The vault is terminal.
+pub const PHASE_CLOSED: u8 = 0x03;
 
 /// Returns the `FixedSplitVaultV1` template program.
 ///
@@ -156,6 +174,16 @@ pub fn template_hash() -> [u8; 32] {
 fn fund_split_script() -> Vec<Opcode> {
     vec![
         // Stack (bottom to top): bob | carol | gross | execution_fee | fee_account
+        //
+        // --- 0. Guard: the vault must never have been funded. ---
+        // The phase is written once by a successful `fund_split` and is never cleared, so this
+        // makes funding terminal: not only a live vault, but also a vault whose beneficiaries
+        // have already redeemed everything, is refused. An absent key reads as an empty item,
+        // which `OP_NOT` turns into a passing flag.
+        Opcode::OP_14(OP_14),
+        Opcode::OP_SREAD(OP_SREAD),
+        Opcode::OP_NOT(OP_NOT),
+        Opcode::OP_VERIFY(OP_VERIFY),
         //
         // --- 1. Guard: the contract must hold exactly the declared gross. ---
         // This runs before the fee leaves the contract, so the balance is still `gross`. A call
@@ -259,7 +287,14 @@ fn fund_split_script() -> Vec<Opcode> {
         Opcode::OP_SHADOW_UP(OP_SHADOW_UP),
         // Stack: bob | carol
         //
-        // --- 9. Drop the keys and return a single true item. ---
+        // --- 9. Record the phase. ---
+        // Written last, so a failure anywhere above leaves the vault unfunded from the state
+        // machine's point of view as well as the balance's.
+        Opcode::OP_TRUE(OP_TRUE),
+        Opcode::OP_14(OP_14),
+        Opcode::OP_SWRITE(OP_SWRITE),
+        //
+        // --- 10. Drop the keys and return a single true item. ---
         Opcode::OP_2DROP(OP_2DROP),
         Opcode::OP_TRUE(OP_TRUE),
         Opcode::OP_RETURNALL(OP_RETURNALL),
@@ -276,13 +311,24 @@ fn redeem_share_script() -> Vec<Opcode> {
         Opcode::OP_VERIFY(OP_VERIFY),
         // Stack: caller
         //
-        // --- 2. Require a nonzero shadow allocation. ---
+        // --- 2. Require a phase in which a redemption is possible. ---
+        // `OP_WITHIN` pops the maximum, then the minimum, then the number, and accepts
+        // `1 <= phase <= 2`: ALLOCATED or PARTIALLY_REDEEMED. An unfunded vault (no key) and a
+        // closed vault (phase 3) are both refused.
+        Opcode::OP_14(OP_14),
+        Opcode::OP_SREAD(OP_SREAD),
+        Opcode::OP_TRUE(OP_TRUE),
+        Opcode::OP_2(OP_2),
+        Opcode::OP_WITHIN(OP_WITHIN),
+        Opcode::OP_VERIFY(OP_VERIFY),
+        //
+        // --- 3. Require a nonzero shadow allocation. ---
         Opcode::OP_DUP(OP_DUP),
         Opcode::OP_SHADOW_ALLOC_VAL(OP_SHADOW_ALLOC_VAL),
         Opcode::OP_VERIFY(OP_VERIFY),
         // Stack: caller | amount
         //
-        // --- 3. Park the amount and the caller in contract memory. ---
+        // --- 4. Park the amount and the caller in contract memory. ---
         // Both are needed twice: once to release the shadow, once to pay it out.
         Opcode::OP_TRUE(OP_TRUE),
         Opcode::OP_MWRITE(OP_MWRITE),
@@ -294,7 +340,7 @@ fn redeem_share_script() -> Vec<Opcode> {
         Opcode::OP_DROP(OP_DROP),
         // Stack: empty
         //
-        // --- 4. Release the allocation from the shadow space. ---
+        // --- 5. Release the allocation from the shadow space. ---
         // `OP_SHADOW_DOWN` pops the account, then the amount.
         Opcode::OP_TRUE(OP_TRUE),
         Opcode::OP_MREAD(OP_MREAD),
@@ -303,7 +349,7 @@ fn redeem_share_script() -> Vec<Opcode> {
         Opcode::OP_SHADOW_DOWN(OP_SHADOW_DOWN),
         // Stack: empty
         //
-        // --- 5. Pay the released amount to the caller. ---
+        // --- 6. Pay the released amount to the caller. ---
         Opcode::OP_TRUE(OP_TRUE),
         Opcode::OP_MREAD(OP_MREAD),
         Opcode::OP_2(OP_2),
@@ -312,7 +358,19 @@ fn redeem_share_script() -> Vec<Opcode> {
         Opcode::OP_TRANSFER(OP_TRANSFER),
         // Stack: empty
         //
-        // --- 6. Return a single true item. ---
+        // --- 7. Advance the phase. ---
+        // `next = 2 + (remaining == 0 ? 1 : 0)`, i.e. PARTIALLY_REDEEMED while a share is still
+        // owed somewhere, and CLOSED once the shadow space is empty. Computed arithmetically so
+        // the script needs no branch.
+        Opcode::OP_SHADOW_ALLOCS_SUM(OP_SHADOW_ALLOCS_SUM),
+        Opcode::OP_NOT(OP_NOT),
+        Opcode::OP_2(OP_2),
+        Opcode::OP_ADD(OP_ADD),
+        Opcode::OP_VERIFY(OP_VERIFY),
+        Opcode::OP_14(OP_14),
+        Opcode::OP_SWRITE(OP_SWRITE),
+        //
+        // --- 8. Return a single true item. ---
         Opcode::OP_TRUE(OP_TRUE),
         Opcode::OP_RETURNALL(OP_RETURNALL),
     ]

@@ -21,7 +21,8 @@
 mod split_vault_template_tests {
     use cube::constructive::calldata::element_type::CalldataElementType;
     use cube::constructive::contracts::fixed_split_vault_v1::template::{
-        template, template_bytes, template_hash, FUND_SPLIT_METHOD_NAME, REDEEM_SHARE_METHOD_NAME,
+        template, template_bytes, template_hash, FUND_SPLIT_METHOD_NAME, PHASE_ALLOCATED,
+        PHASE_CLOSED, PHASE_PARTIALLY_REDEEMED, REDEEM_SHARE_METHOD_NAME, STATE_KEY_PHASE,
     };
     use cube::constructive::core_types::calldata::calldata_elements::calldata_element::CalldataElement;
     use cube::constructive::core_types::entities::account::account::account::Account;
@@ -372,6 +373,15 @@ mod split_vault_template_tests {
                 .expect("contract must be registered")
         }
 
+        /// Returns the contract's stored lifecycle phase, or `None` before it is written.
+        async fn phase(&self) -> Option<u8> {
+            let state_manager = { self.session_pool.lock().await.state_manager.clone() };
+            let _state_manager = state_manager.lock().await;
+            _state_manager
+                .get_state_value(self.contract_id, &vec![STATE_KEY_PHASE])
+                .and_then(|value| value.first().copied())
+        }
+
         /// Returns a beneficiary's shadow allocation in the contract.
         async fn shadow(&self, key: [u8; 32]) -> u64 {
             let _coin_manager = self.coin_manager.lock().await;
@@ -389,6 +399,7 @@ mod split_vault_template_tests {
         both_beneficiaries_can_redeem().await;
         a_second_redemption_is_rejected().await;
         a_second_fund_of_a_live_vault_is_rejected().await;
+        phase_advances_and_makes_the_vault_terminal().await;
     }
 
     /// The template compiles, keeps its shape, and both methods are callable.
@@ -679,5 +690,73 @@ mod split_vault_template_tests {
         assert_eq!(harness.balance(harness.alice_key).await, alice_after_first);
         assert_eq!(harness.shadow(harness.bob_key).await, EXPECTED_BOB_SATS);
         assert_eq!(harness.shadow(harness.carol_key).await, EXPECTED_CAROL_SATS);
+    }
+
+    /// The stored phase advances with the lifecycle and makes the vault terminal.
+    async fn phase_advances_and_makes_the_vault_terminal() {
+        let harness = harness().await;
+
+        // 1 An instantiated but unfunded vault has no phase yet.
+        assert_eq!(harness.phase().await, None);
+
+        // 2 Funding writes ALLOCATED.
+        let (fund_call, fund_signature) = harness.signed_fund_call(GROSS_SATS as u32).await;
+        harness
+            .session_pool
+            .lock()
+            .await
+            .exec_call_in_pool(&fund_call, fund_signature)
+            .await
+            .expect("fund_split must execute");
+        assert_eq!(harness.phase().await, Some(PHASE_ALLOCATED));
+
+        // 3 The first redemption writes PARTIALLY_REDEEMED.
+        let (bob_call, bob_signature) = harness
+            .signed_redeem_call(&harness.bob, harness.bob_key)
+            .await;
+        harness
+            .session_pool
+            .lock()
+            .await
+            .exec_call_in_pool(&bob_call, bob_signature)
+            .await
+            .expect("Bob's redemption must execute");
+        assert_eq!(harness.phase().await, Some(PHASE_PARTIALLY_REDEEMED));
+
+        // 4 The second redemption writes CLOSED.
+        let (carol_call, carol_signature) = harness
+            .signed_redeem_call(&harness.carol, harness.carol_key)
+            .await;
+        harness
+            .session_pool
+            .lock()
+            .await
+            .exec_call_in_pool(&carol_call, carol_signature)
+            .await
+            .expect("Carol's redemption must execute");
+        assert_eq!(harness.phase().await, Some(PHASE_CLOSED));
+        assert_eq!(harness.contract_balance().await, 0);
+
+        // 5 The vault is terminal: refunding it is refused by the phase guard even though the
+        //   contract balance is now zero and the allocation guard alone would not fire.
+        let (refund_call, refund_signature) = harness.signed_fund_call(1_000).await;
+        let result = harness
+            .session_pool
+            .lock()
+            .await
+            .exec_call_in_pool(&refund_call, refund_signature)
+            .await;
+        assert!(
+            matches!(
+                result,
+                Err(cube::operative::tasks::engine_session::session_pool::error::exec_call_in_pool_error::ExecCallInPoolError::CallExecutionError(_))
+            ),
+            "unexpected result: {:?}",
+            result.err()
+        );
+        assert_eq!(harness.phase().await, Some(PHASE_CLOSED));
+        assert_eq!(harness.contract_balance().await, 0);
+        assert_eq!(harness.shadow(harness.bob_key).await, 0);
+        assert_eq!(harness.shadow(harness.carol_key).await, 0);
     }
 }
