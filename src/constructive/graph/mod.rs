@@ -10,10 +10,12 @@
 //!   beneficiary claims.
 //! - `claim_recovery`: the `Recovery` role, which spends one claim from its recovery package without
 //!   the Engine.
+//! - `exit_request`: the `ExitRequest` role, an on-chain notice that binds a claim, a deadline and a
+//!   data-disclosure commitment.
 //!
-//! Not implemented: `ExitRequest`, `Assert`, `Take` and `Disprove` (the dispute branch), and the
-//! `CooperativeSettle` edge. `GRAPH-01` therefore stays open; this module reduces it edge by edge
-//! rather than closing it.
+//! Not implemented: `Assert`, `Take` and `Disprove` (the dispute branch), which are blocked on the
+//! BitVM3 label-binding construction (`BIND-01`), and the `CooperativeSettle` edge. `GRAPH-01`
+//! therefore stays open; this module reduces it edge by edge rather than closing it.
 //!
 //! # Authorization
 //!
@@ -42,4 +44,5 @@
 //! paired with a graph whose signatures cover the statement, which is what these edges provide.
 
 pub mod claim_recovery;
+pub mod exit_request;
 pub mod successor_funding;
