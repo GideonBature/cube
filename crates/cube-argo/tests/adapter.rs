@@ -9,11 +9,11 @@
 
 use ark_bn254::{Fq12, G1Affine, G2Affine};
 use ark_ff::{BigInteger, PrimeField, UniformRand};
+use ark_std::rand::{rngs::StdRng, SeedableRng};
 use cube_argo::{
     prepare_verifier_key, register_verifier_key_identity, registered_verifier_key_identity,
     reset_verifier_key_identity, ArgoAdapterError, GarblingConfig, PreparedVerifierKey,
 };
-use ark_std::rand::{rngs::StdRng, SeedableRng};
 
 /// A non-zero disclosure secret.
 const SECRET_BYTES: [u8; 32] = [0x11; 32];
@@ -123,8 +123,8 @@ fn prepared_verifier_key_round_trips_through_canonical_bytes() {
         Fq12::rand(&mut rng),
     );
 
-    let prepared = PreparedVerifierKey::from_argo_verifier_key(&verifier_key)
-        .expect("the key must serialize");
+    let prepared =
+        PreparedVerifierKey::from_argo_verifier_key(&verifier_key).expect("the key must serialize");
     assert!(
         !prepared.canonical_bytes.is_empty(),
         "the carrier must not be empty"
@@ -136,8 +136,7 @@ fn prepared_verifier_key_round_trips_through_canonical_bytes() {
         .expect("the bytes must decode");
 
     // 3 `VerifierKey` has no `PartialEq`, so compare by re-encoding: a stable round trip.
-    let reencoded =
-        PreparedVerifierKey::from_argo_verifier_key(&decoded).expect("re-encode");
+    let reencoded = PreparedVerifierKey::from_argo_verifier_key(&decoded).expect("re-encode");
     assert_eq!(reencoded.canonical_bytes, prepared.canonical_bytes);
     assert_eq!(reencoded.identity(), prepared.identity());
 
@@ -148,8 +147,7 @@ fn prepared_verifier_key_round_trips_through_canonical_bytes() {
         G2Affine::rand(&mut rng),
         Fq12::rand(&mut rng),
     );
-    let other_prepared =
-        PreparedVerifierKey::from_argo_verifier_key(&other).expect("serialize");
+    let other_prepared = PreparedVerifierKey::from_argo_verifier_key(&other).expect("serialize");
     assert_ne!(other_prepared.identity(), prepared.identity());
 
     // 5 Garbage bytes are refused rather than decoded into a bogus key.

@@ -30,11 +30,23 @@
 //!    seed; [`GarblingConfig`] requires explicitly supplied entropy and refuses a zero seed.
 //! 4. `Fq::ZERO` is Argo's "no disclosure" sentinel, so a zero disclosure secret must be rejected at
 //!    setup or a valid proof and a disclosed secret become indistinguishable.
+//!
+//! # Contents
+//!
+//! - [`PreparedVerifierKey`]: the canonical-byte carrier for Argo's prepared equation.
+//! - [`Groth16VerifyingKey`] and [`PreparedVerifierKey::from_groth16_verifying_key`]: the projection
+//!   of a standard Groth16 key onto that equation, including the pairing signs Argo requires.
+//! - [`GarblingConfig`]: the entropy and disclosure-secret preconditions for setup.
+//! - [`register_verifier_key_identity`]: the process-wide guard for upstream's unkeyed cache.
 
+mod convert;
+
+pub use convert::{Groth16Proof, Groth16VerifyingKey};
+
+use argo::garble::groth16_verifier::VerifierKey;
 use ark_bn254::{Fq, Fq12, G1Affine, G2Affine};
 use ark_ff::{AdditiveGroup, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use argo::garble::groth16_verifier::VerifierKey;
 use std::sync::Mutex;
 
 /// Errors raised by the adapter itself, before Argo is involved.
@@ -61,6 +73,21 @@ pub enum ArgoAdapterError {
     },
     /// The verifier key bytes did not decode.
     InvalidVerifierKeyBytes,
+    /// The Groth16 key does not have exactly one public input.
+    ///
+    /// Argo's equation multiplies one `G1` point by one scalar, so a key with a different number of
+    /// `gamma_abc_g1` entries cannot be represented without dropping or merging inputs.
+    UnsupportedPublicInputCount {
+        /// The number of `gamma_abc_g1` entries that was supplied.
+        found: usize,
+    },
+    /// A verifier-key component cannot carry a nontrivial equation.
+    ///
+    /// Raised for a point at infinity in any component, and for a constant term that has no
+    /// inverse. Either case would silently remove a constraint instead of failing the proof.
+    DegenerateVerifierKey,
+    /// The converted verifier key could not be encoded into canonical bytes.
+    VerifierKeyEncoding,
     /// The disclosure secret bytes did not decode to a field element.
     InvalidDisclosureSecretBytes,
     /// No verifier key was registered before use.
@@ -212,13 +239,9 @@ impl PreparedVerifierKey {
 
 /// Builds a prepared verifier key from its four prepared components.
 ///
-/// Exposed so that a converter can be written and tested against arkworks 0.5 types directly.
-pub fn prepare_verifier_key(
-    g1: G1Affine,
-    h1: G2Affine,
-    h2: G2Affine,
-    c: Fq12,
-) -> VerifierKey {
+/// Low-level constructor. [`PreparedVerifierKey::from_groth16_verifying_key`] is the supported way
+/// to obtain these components from a real key.
+pub fn prepare_verifier_key(g1: G1Affine, h1: G2Affine, h2: G2Affine, c: Fq12) -> VerifierKey {
     VerifierKey {
         G1: g1,
         H1: h1,
