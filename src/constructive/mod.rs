@@ -1,4 +1,5 @@
 pub mod bitcoiny;
+pub mod contracts;
 pub mod core_types;
 pub mod entries;
 pub mod txout_types;
