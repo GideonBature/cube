@@ -2,10 +2,12 @@ use crate::constructive::core_types::valtypes::val::long_val::ape::decode::error
 use crate::constructive::core_types::valtypes::val::short_val::ape::decode::error::decode_error::ShortValAPEDecodeError;
 use crate::constructive::entry::entry::ext::codec::ape::decode::error::decode_error::EntryAPEDecodeError;
 use crate::constructive::entry::entry_kinds::config::ext::signature::sighash::error::sighash_error::ConfigSighashError;
+use crate::constructive::entry::entry_kinds::call::ext::signature::sighash::error::sighash_error::CallSighashError;
 use crate::constructive::entry::entry_kinds::deploy::ext::signature::sighash::error::sighash_error::DeploySighashError;
 use crate::constructive::entries::entry_kinds::liftup::ext::signature::sighash::error::sighash_error::LiftupSighashError;
 use crate::constructive::entries::entry_kinds::r#move::ext::signature::sighash::error::sighash_error::MoveSighashError;
 use crate::executive::entry_executions::config_execution::error::config_execution_error::ConfigExecutionError;
+use crate::executive::entry_executions::call_execution::error::call_execution_error::CallExecutionError;
 use crate::executive::entry_executions::deploy_execution::error::deploy_execution_error::DeployExecutionError;
 use crate::executive::entry_executions::liftup_execution::error::liftup_execution_error::LiftupExecutionError;
 use crate::executive::entry_executions::move_execution::error::move_execution_error::MoveExecutionError;
@@ -54,6 +56,8 @@ pub enum BatchExecutionError {
     DeploySighashError(DeploySighashError),
     ConfigExecutionError(ConfigExecutionError),
     ConfigSighashError(ConfigSighashError),
+    CallExecutionError(CallExecutionError),
+    CallSighashError(CallSighashError),
     /// An entry kind reached batch execution without a wired executor.
     ///
     /// Deterministic rejection at the boundary instead of a panic, so that a rejected batch

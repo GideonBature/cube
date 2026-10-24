@@ -3,6 +3,7 @@ use crate::constructive::bitcoiny::batch_txn::signed_batch_txn::signed_batch_txn
 use crate::constructive::entry::entry::entry::Entry;
 use crate::constructive::entry::entry_kinds::config::config::Config;
 use crate::constructive::entry::entry_kinds::deploy::deploy::Deploy;
+use crate::constructive::entries::entry_kinds::call::call::Call;
 use crate::constructive::entry::entry_kinds::liftup::liftup::Liftup;
 use crate::constructive::entry::entry_kinds::r#move::r#move::Move;
 use crate::constructive::entry::entry_kinds::swapout::swapout::Swapout;
@@ -22,6 +23,7 @@ use crate::inscriptive::registry::registry::REGISTRY;
 use crate::inscriptive::state_manager::state_manager::STATE_MANAGER;
 use crate::inscriptive::sync_manager::sync_manager::SYNC_MANAGER;
 use crate::inscriptive::utxo_set::utxo_set::UTXO_SET;
+use crate::operative::tasks::engine_session::session_pool::error::exec_call_in_pool_error::ExecCallInPoolError;
 use crate::operative::tasks::engine_session::session_pool::error::exec_config_in_pool_error::ExecConfigInPoolError;
 use crate::operative::tasks::engine_session::session_pool::error::exec_deploy_in_pool_error::ExecDeployInPoolError;
 use crate::operative::tasks::engine_session::session_pool::error::exec_liftup_in_pool_error::ExecLiftupInPoolError;
@@ -569,6 +571,92 @@ impl SessionPool {
                 }
                 // 5.b.2 Return the error.
                 Err(ExecMoveInPoolError::MoveExecutionError(format!(
+                    "{error:?}"
+                )))
+            }
+        }
+    }
+
+    /// Executes a `Call` entry in the `SessionPool`.
+    ///
+    /// The pool is the Engine's interactive admission path: it verifies the entry's BLS signature,
+    /// runs the end-to-end pre-validation, executes against backed-up manager deltas and rolls
+    /// them back if anything fails. The corresponding replay path is the `Entry::Call` arm of
+    /// `ExecCtx::execute_batch`.
+    pub async fn exec_call_in_pool(
+        &mut self,
+        call: &Call,
+        call_bls_signature: [u8; 96],
+    ) -> Result<(EntryId, Entry, BatchHeight, BatchTimestamp), ExecCallInPoolError> {
+        // 1 Check the pool session status.
+        match self.state {
+            SessionPoolState::Inactive => return Err(ExecCallInPoolError::SessionInactiveError),
+            SessionPoolState::Suspended => return Err(ExecCallInPoolError::SessionSuspendedError),
+            SessionPoolState::Break => return Err(ExecCallInPoolError::SessionBreakError),
+            _ => {
+                if self.added_entries.len() >= MAX_IN_POOL_ENTRIES {
+                    return Err(ExecCallInPoolError::PoolOverloadedError);
+                }
+            }
+        };
+
+        // 2 Get the batch height and batch timestamp.
+        let (batch_height, batch_timestamp, _) = self
+            .batch_info
+            .ok_or(ExecCallInPoolError::BatchInfoNotFoundError)?;
+
+        // 3 Verify the entry signature and run pre-validations.
+        {
+            call.bls_verify(call_bls_signature)
+                .map_err(|err| ExecCallInPoolError::CallBLSVerifyError(format!("{err:?}")))?;
+
+            call.validate_overall(batch_height, &self.registry, &self.graveyard)
+                .await
+                .map_err(|err| ExecCallInPoolError::CallValidateOverallError(format!("{err:?}")))?;
+        }
+
+        // 4 Prepare for execution by backing up the execution context.
+        {
+            let mut _exec_ctx = self.exec_ctx.lock().await;
+            _exec_ctx.pre_execution().await;
+        }
+
+        // 5 Execute the call in the execution context.
+        // Drop the mutex guard before `match` arms — see `exec_liftup_in_pool` for the deadlock note.
+        let call_result = {
+            let mut exec_ctx = self.exec_ctx.lock().await;
+            exec_ctx.execute_call(call, batch_timestamp).await
+        };
+
+        match call_result {
+            // 5.a Success.
+            Ok(call_entry) => {
+                // 5.a.1 Derive the entry id.
+                let entry_index_in_batch = self.added_entries.len() as u32;
+                let entry_id = call_entry
+                    .entry_id(batch_height, entry_index_in_batch)
+                    .ok_or(ExecCallInPoolError::EntryIdDerivationError)?;
+
+                // 5.a.2 Add the call entry to the added entries.
+                self.added_entries.push(call_entry.clone());
+
+                // 5.a.3 Add the call BLS signature to the pooled individual entry signatures.
+                self.added_individual_entry_bls_signatures
+                    .push(call_bls_signature);
+
+                // 5.a.4 Return entry and pool metadata.
+                Ok((entry_id, call_entry, batch_height, batch_timestamp))
+            }
+
+            // 5.b Error.
+            Err(error) => {
+                // 5.b.1 Rollback the execution.
+                {
+                    self.exec_ctx.lock().await.rollback_last().await;
+                }
+
+                // 5.b.2 Return the error.
+                Err(ExecCallInPoolError::CallExecutionError(format!(
                     "{error:?}"
                 )))
             }

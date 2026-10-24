@@ -22,7 +22,9 @@ pub enum EntryFees {
     Call {
         base_fee: u64,
         total_pre_subsidy: u64,
-        subsidy_breakdown: ExemptionSubsidyBreakdown,
+        /// `Some` when a PM exemption row existed and a subsidy was applied; `None` when the call
+        /// did not participate in the tx-fee exemption programme.
+        subsidy_breakdown: Option<ExemptionSubsidyBreakdown>,
     },
     Swapout {
         base_fee: u64,
@@ -116,7 +118,13 @@ impl EntryFees {
                     "total_pre_subsidy".to_string(),
                     Value::Number((*total_pre_subsidy).into()),
                 );
-                obj.insert("subsidy_breakdown".to_string(), subsidy_breakdown.json());
+                obj.insert(
+                    "subsidy_breakdown".to_string(),
+                    match subsidy_breakdown {
+                        Some(b) => b.json(),
+                        None => Value::Null,
+                    },
+                );
             }
             EntryFees::Swapout {
                 base_fee,
