@@ -30,7 +30,7 @@ mod liftv2_regtest_tests {
     };
     use bitcoincore_rpc::{Auth, Client, RpcApi};
     use cube::constructive::contracts::fixed_split_vault_v1::claim::{
-        parse_claim_script, parse_statement_op_return_script,
+        parse_claim_script, parse_statement_op_return_script, statement_op_return_script,
     };
     use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
     use cube::constructive::graph::successor_funding::{DepositAnchor, SuccessorFunding};
@@ -971,6 +971,51 @@ mod liftv2_regtest_tests {
         )
         .expect("the successor signature must verify locally");
         successor.input[0].witness = Witness::from_slice(&[signature.to_vec()]);
+
+        // 6.b The statement is inside the signature scope. Bitcoin must accept the honest spend and
+        //     reject the same spend once one committed digest byte changes: the MuSig2 key path
+        //     signs the sighash, and the OP_RETURN commitment is part of it. This is the graph-level
+        //     authorization the relation relies on instead of an in-circuit BIP-340 gadget.
+        let honest_accept: serde_json::Value = rpc
+            .call(
+                "testmempoolaccept",
+                &[json!([bitcoin::consensus::encode::serialize_hex(
+                    &successor
+                )])],
+            )
+            .expect("testmempoolaccept");
+        assert_eq!(
+            honest_accept[0]["allowed"],
+            json!(true),
+            "the honest successor must pass mempool acceptance"
+        );
+
+        let mut tampered_digest = statement_digest;
+        tampered_digest[0] ^= 0x01;
+        let mut tampered = successor.clone();
+        tampered.output[3].script_pubkey =
+            ScriptBuf::from_bytes(statement_op_return_script(tampered_digest));
+        let tampered_accept: serde_json::Value = rpc
+            .call(
+                "testmempoolaccept",
+                &[json!([bitcoin::consensus::encode::serialize_hex(
+                    &tampered
+                )])],
+            )
+            .expect("testmempoolaccept");
+        assert_eq!(
+            tampered_accept[0]["allowed"],
+            json!(false),
+            "a changed statement commitment must not be spendable under the same signature"
+        );
+        let reason = tampered_accept[0]["reject-reason"]
+            .as_str()
+            .unwrap_or_default();
+        println!("tampered statement rejection: {reason}");
+        assert!(
+            reason.contains("script-verify") || reason.contains("schnorr"),
+            "the rejection must be the signature check, got: {reason}"
+        );
 
         // 7 Bitcoin Core must accept the successor funding.
         let successor_txid: String = rpc
