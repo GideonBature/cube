@@ -21,9 +21,10 @@
 //!
 //! # What setup assumes
 //!
-//! Exactly one verifier key per process, enforced by [`PreparedVerifierKey::register`]. Upstream
-//! caches verifier preprocessing in an unkeyed `static`, so a second key in the same process would
-//! silently reuse the first key's precomputation. The adapter refuses instead.
+//! Several verifier keys may be used in one process: the vendored Argo keys its preprocessing cache
+//! by the verifier key (`vendor/argo/PATCHES.md` item 1), so a second key cannot inherit the first
+//! key's pairing powers. A table is still bound to exactly one key, and [`GarbledVerifier::evaluate`]
+//! discloses on proofs made for another key — `tests/garbling.rs` checks both directions.
 //!
 //! The disclosure secret must not be zero, because `Fq::ZERO` is Argo's "no disclosure" sentinel.
 //! [`GarblingConfig::validate`] enforces that before any table exists.
@@ -88,8 +89,8 @@ pub struct GarbledVerifier {
 impl GarbledVerifier {
     /// Garbles a verifier key into a table that discloses `config.disclosure_secret` on failure.
     ///
-    /// The verifier key is registered process-wide first, so a second, different key is refused
-    /// before any table exists rather than silently reusing the first key's precomputation.
+    /// Any number of keys may be garbled in one process; each table is bound to the key it was
+    /// garbled from, and its identity is reported by [`Self::key_identity`].
     pub fn setup(
         config: &GarblingConfig,
         key: &PreparedVerifierKey,
@@ -99,9 +100,7 @@ impl GarbledVerifier {
         // reproducible; a zero secret is indistinguishable from "nothing was disclosed".
         let disclosure_secret = config.disclosure_secret_field()?;
 
-        // Refuse a second verifier key in this process.
-        let key_identity = key.register()?;
-
+        let key_identity = key.identity();
         let verifier_key = key.to_argo_verifier_key()?;
 
         // Domain-separate the two uses of the configured seed. See the module documentation.

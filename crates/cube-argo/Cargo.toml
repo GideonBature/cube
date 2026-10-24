@@ -5,8 +5,10 @@ edition = "2021"
 publish = false
 
 [dependencies]
-# Pinned exactly as recorded in docs/implementation.md section 2.
-argo = { git = "https://github.com/idealgroup/argo", rev = "aa28ba884f9af3d41265774a882d4efd9f4d9b95" }
+# Vendored from the revision recorded in docs/implementation.md section 2, with the
+# preprocessing-cache patch described in vendor/argo/PATCHES.md. A pinned git dependency cannot be
+# patched, and the patch is what keeps two verifier keys in one process from sharing precomputation.
+argo = { path = "../../vendor/argo" }
 
 # Argo declares `blake3 = "1.8.2"` with `traits-preview`, and ark-ff 0.5 needs
 # `blake3::Hasher: FixedOutputReset`. That bound no longer holds in blake3 1.8.7, so a fresh

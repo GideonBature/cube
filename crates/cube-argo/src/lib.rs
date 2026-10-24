@@ -12,19 +12,19 @@
 //! boundary a build-time fact rather than a convention: Cube's default build cannot accidentally
 //! depend on Argo types.
 //!
-//! # Upstream properties this adapter has to live with
+//! # Upstream properties this adapter lives with
 //!
-//! Verified at the pinned revision `aa28ba88`:
-//!
-//! 1. `groth16_verifier::garble_preprocess` caches `e(G, H1)^{2^i}` / `e(G, H2)^{2^i}` in a
-//!    process-global `static PREPROCESSED_VK` and returns it **without checking which verifying key
-//!    produced it**. Garbling a second, different key in the same process would silently reuse the
-//!    first key's precomputation. [`VerifierKeyIdentity`] exists to make that impossible through
-//!    this crate: one key identity per process, fail closed otherwise.
+//! 1. `groth16_verifier::garble_preprocess` cached `e(G, H1)^{2^i}` / `e(G, H2)^{2^i}` in a
+//!    process-global `static PREPROCESSED_VK` and returned it **without checking which verifying key
+//!    produced it**, so a second key silently reused the first key's precomputation. This workspace
+//!    vendors the pinned revision and patches that cache to be keyed by the verifier key; see
+//!    `vendor/argo/PATCHES.md` item 1. [`VerifierKeyIdentity`] remains as the stable identity used
+//!    for binding a table to its key. If the dependency ever returns to the unpatched upstream, a
+//!    second key per process becomes unsafe again.
 //! 2. `Table::evaluate` calls `input_validity::evaluate(..)?` and **discards** the returned `Fq`.
 //!    That value is the disclosure secret on every input-validity failure path, so those failures do
 //!    not contribute evidence to the output. This adapter does not paper over it; it is recorded as
-//!    an open defect.
+//!    an open defect in `vendor/argo/PATCHES.md`.
 //! 3. `garble_groth16(rng_seed: u64, ..)` seeds `StdRng::seed_from_u64`. The public constructor
 //!    therefore takes 64 bits of seed for the whole garbling. Setup must not use it with a guessable
 //!    seed; [`GarblingConfig`] requires explicitly supplied entropy and refuses a zero seed.
@@ -41,7 +41,7 @@
 //!   a boolean.
 //! - [`statement_public_input`]: the proposed projection of a 32-byte statement digest onto Argo's
 //!   single public scalar, with its loss stated rather than assumed.
-//! - [`register_verifier_key_identity`]: the process-wide guard for upstream's unkeyed cache.
+//! - [`VerifierKeyIdentity`]: the stable identity of a verifier key, used to bind tables to keys.
 
 mod convert;
 mod garbling;
@@ -57,7 +57,6 @@ use argo::garble::groth16_verifier::VerifierKey;
 use ark_bn254::{Fq, Fq12, G1Affine, G2Affine};
 use ark_ff::{AdditiveGroup, PrimeField};
 use ark_serialize::{CanonicalDeserialize, CanonicalSerialize};
-use std::sync::Mutex;
 
 /// Errors raised by the adapter itself, before Argo is involved.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -71,16 +70,6 @@ pub enum ArgoAdapterError {
     ///
     /// The seed is only 64 bits; a constant or zero seed makes the garbling reproducible by anyone.
     ZeroRngSeed,
-    /// A different verifier key was already registered in this process.
-    ///
-    /// Upstream caches the verifier preprocessing process-globally without keying it by the key, so
-    /// a second identity would silently reuse the first key's precomputation.
-    ConflictingVerifierKey {
-        /// The identity already registered.
-        registered: [u8; 32],
-        /// The identity that was refused.
-        rejected: [u8; 32],
-    },
     /// The verifier key bytes did not decode.
     InvalidVerifierKeyBytes,
     /// The Groth16 key does not have exactly one public input.
@@ -110,58 +99,10 @@ pub enum ArgoAdapterError {
     SerializationFailed,
     /// The disclosure secret bytes did not decode to a field element.
     InvalidDisclosureSecretBytes,
-    /// No verifier key was registered before use.
-    NoVerifierKeyRegistered,
 }
 
 /// A stable identity for one Groth16 verifying key, derived from its canonical bytes.
 pub type VerifierKeyIdentity = [u8; 32];
-
-/// The process-wide identity guard for Argo's global verifier preprocessing.
-///
-/// Upstream `garble_preprocess` stores its result in an unkeyed `static`. This guard is the only
-/// supported way to reach Argo through this crate, and it permits exactly one verifier-key identity
-/// per process.
-static REGISTERED_VERIFIER_KEY: Mutex<Option<VerifierKeyIdentity>> = Mutex::new(None);
-
-/// Registers the verifier-key identity for this process.
-///
-/// Re-registering the *same* identity is allowed and idempotent. Registering a different identity is
-/// refused, because upstream would otherwise reuse the first key's precomputation.
-pub fn register_verifier_key_identity(
-    identity: VerifierKeyIdentity,
-) -> Result<(), ArgoAdapterError> {
-    let mut registered = REGISTERED_VERIFIER_KEY
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-
-    match *registered {
-        None => {
-            *registered = Some(identity);
-            Ok(())
-        }
-        Some(existing) if existing == identity => Ok(()),
-        Some(existing) => Err(ArgoAdapterError::ConflictingVerifierKey {
-            registered: existing,
-            rejected: identity,
-        }),
-    }
-}
-
-/// Clears the registered identity. Intended for tests that run in one process.
-pub fn reset_verifier_key_identity() {
-    let mut registered = REGISTERED_VERIFIER_KEY
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner());
-    *registered = None;
-}
-
-/// Returns the registered verifier-key identity, if any.
-pub fn registered_verifier_key_identity() -> Option<VerifierKeyIdentity> {
-    *REGISTERED_VERIFIER_KEY
-        .lock()
-        .unwrap_or_else(|poisoned| poisoned.into_inner())
-}
 
 /// The parameters a garbling instance is created from.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -247,13 +188,6 @@ impl PreparedVerifierKey {
         let mut identity = [0u8; 32];
         identity.copy_from_slice(&digest);
         identity
-    }
-
-    /// Registers this key as the process's single Argo verifier key.
-    pub fn register(&self) -> Result<VerifierKeyIdentity, ArgoAdapterError> {
-        let identity = self.identity();
-        register_verifier_key_identity(identity)?;
-        Ok(identity)
     }
 }
 

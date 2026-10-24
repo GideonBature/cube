@@ -1,11 +1,31 @@
 [workspace]
 members = ["crates/cube-argo"]
+# `vendor/argo` is a pinned, locally patched copy of upstream Argo. It is a path dependency, not a
+# member: keeping it out of the workspace keeps upstream code out of `cargo fmt --all` and clippy.
+exclude = ["vendor/argo"]
+
+# Lint levels live on the workspace so member crates can inherit them with `[lints] workspace = true`.
+# This also avoids a false positive in Even Better TOML, which cannot resolve the lint sub-schemas
+# when they are reached through the `anyOf` that guards a package-level `[lints]` table.
+[workspace.lints.clippy]
+module_inception = "allow"
+result_large_err = "allow"
+too_many_arguments = "allow"
+wrong_self_convention = "allow"
+large_enum_variant = "allow"
+manual_div_ceil = "allow"
+assign_op_pattern = "allow"
+manual_async_fn = "allow"
 
 [package]
 name = "cube"
 version = "0.1.2"
 authors = ["Brock Aegean <brock@bits.app>"]
 edition = "2021"
+
+# Inherit the lint levels configured under `[workspace.lints]`.
+[lints]
+workspace = true
 
 [dependencies]
 axum = "0.7.9"
@@ -42,13 +62,3 @@ path = "src/lib.rs"
 [[bin]]
 name = "cube"
 path = "src/operative/main.rs"
-
-[lints.clippy]
-module_inception = "allow"
-result_large_err = "allow"
-too_many_arguments = "allow"
-wrong_self_convention = "allow"
-large_enum_variant = "allow"
-manual_div_ceil = "allow"
-assign_op_pattern = "allow"
-manual_async_fn = "allow"

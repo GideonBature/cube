@@ -1,0 +1,60 @@
+[package]
+name = "argo"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+rand = "0.9.2"
+ark-ff = "0.5.0"
+ark-ec = "0.5.0"
+ark-std = { version = "0.5.0", features = [ "getrandom" ]}
+ark-bn254 = "0.5.0"
+ark-serialize = "0.5.0"
+blake3 = { version = "1.8.2", features = [ "traits-preview" ]}
+aes = "0.8.4"
+derive_more = { version = "2.1.0", features = [ "from", "deref" ]}
+num-bigint = "0.4.6"
+rayon = "1.11.0"
+thiserror = "2.0.18"
+parking_lot = "0.12.5"
+arrayvec = "0.7.6"
+rustc-hash = "2.1.1"
+
+[dev-dependencies]
+criterion = "0.7.0"
+mimalloc = "0.1.48"
+
+[profile.release]
+opt-level = 3
+incremental = true
+panic = 'abort'
+lto = "thin"
+codegen-units = 1
+
+[profile.test-release]
+inherits = "release"
+opt-level = 1
+
+[profile.bench]
+inherits = "release"
+debug = true
+rpath = false
+incremental = true
+debug-assertions = false
+
+[[bench]]
+name = "groth16_verifier"
+harness = false
+
+[[bench]]
+name = "field_mac_to_ec_mac"
+harness = false
+
+[[bench]]
+name = "amortised_groth16_verifier"
+harness = false
+
+# PATCH(cube): make the vendored tree a standalone package. Without this, Cargo would treat it as
+# an implicit member of the containing workspace, which would pull 7.8k lines of upstream code into
+# `cargo fmt --all` and `clippy -D warnings`. The Cube workspace excludes this path explicitly too.
+[workspace]

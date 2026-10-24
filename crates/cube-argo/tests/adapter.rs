@@ -1,20 +1,17 @@
 //! Tests for the Argo adapter.
 //!
 //! These do not garble anything. They cover the boundary this crate owns: configuration validation,
-//! the process-wide verifier-key guard that works around upstream's unkeyed preprocessing cache, and
-//! the canonical byte carrier that crosses the arkworks 0.4 / 0.5 gap.
+//! the canonical byte carrier that crosses the arkworks 0.4 / 0.5 gap, and the bound on what a
+//! verifier key may look like.
 //!
 //! Garbling and evaluation are covered separately: `convert.rs` checks the key projection and
-//! `garbling.rs` garbles a table and evaluates it. Both use algebraic fixtures, not a proof for a
+//! `garbling.rs` garbles tables and evaluates them. Both use algebraic fixtures, not a proof for a
 //! real relation, because no relation exists yet.
 
 use ark_bn254::{Fq12, G1Affine, G2Affine};
 use ark_ff::{BigInteger, PrimeField, UniformRand};
 use ark_std::rand::{rngs::StdRng, SeedableRng};
-use cube_argo::{
-    prepare_verifier_key, register_verifier_key_identity, registered_verifier_key_identity,
-    reset_verifier_key_identity, ArgoAdapterError, GarblingConfig, PreparedVerifierKey,
-};
+use cube_argo::{prepare_verifier_key, ArgoAdapterError, GarblingConfig, PreparedVerifierKey};
 
 /// A non-zero disclosure secret.
 const SECRET_BYTES: [u8; 32] = [0x11; 32];
@@ -77,39 +74,6 @@ fn garbling_config_rejects_unusable_entropy_and_secrets() {
         config.disclosure_secret_field().expect("field element"),
         ark_bn254::Fq::from(0u64)
     );
-}
-
-#[test]
-fn verifier_key_identity_guard_allows_one_key_per_process() {
-    reset_verifier_key_identity();
-    assert_eq!(registered_verifier_key_identity(), None);
-
-    let first = [0x01u8; 32];
-    let second = [0x02u8; 32];
-
-    // 1 The first identity registers.
-    assert_eq!(register_verifier_key_identity(first), Ok(()));
-    assert_eq!(registered_verifier_key_identity(), Some(first));
-
-    // 2 Re-registering the same identity is idempotent, so a retry cannot fail spuriously.
-    assert_eq!(register_verifier_key_identity(first), Ok(()));
-
-    // 3 A different identity is refused, naming both sides. Upstream would otherwise reuse the
-    //   first key's precomputation for the second key.
-    assert_eq!(
-        register_verifier_key_identity(second),
-        Err(ArgoAdapterError::ConflictingVerifierKey {
-            registered: first,
-            rejected: second,
-        })
-    );
-    assert_eq!(
-        registered_verifier_key_identity(),
-        Some(first),
-        "a refused registration must not change the registered identity"
-    );
-
-    reset_verifier_key_identity();
 }
 
 #[test]

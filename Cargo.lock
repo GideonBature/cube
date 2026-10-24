@@ -83,7 +83,6 @@ dependencies = [
 [[package]]
 name = "argo"
 version = "0.1.0"
-source = "git+https://github.com/idealgroup/argo?rev=aa28ba884f9af3d41265774a882d4efd9f4d9b95#aa28ba884f9af3d41265774a882d4efd9f4d9b95"
 dependencies = [
  "aes",
  "ark-bn254",
