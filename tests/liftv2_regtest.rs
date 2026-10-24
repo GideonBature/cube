@@ -29,8 +29,19 @@ mod liftv2_regtest_tests {
         Address, Amount, Network, OutPoint, ScriptBuf, Sequence, Transaction, TxIn, TxOut, Witness,
     };
     use bitcoincore_rpc::{Auth, Client, RpcApi};
+    use cube::constructive::contracts::fixed_split_vault_v1::claim::{
+        claim_control_block, claim_script, claim_scriptpubkey, parse_claim_script,
+        parse_statement_op_return_script, statement_op_return_script,
+    };
     use cube::constructive::taproot::TapRoot;
     use cube::constructive::txo::lift::lift_versions::liftv2::liftv2::return_liftv2_taproot;
+    use cube::model::fixed_split_vault_v1::manifest::{
+        Payout, PayoutKind, ReleaseProfile, TransitionManifest, MANIFEST_SCHEMA_VERSION,
+    };
+    use cube::model::fixed_split_vault_v1::types::{Ledger, Role};
+    use cube::model::fixed_split_vault_v1::{
+        split_amounts, Anchor, Auth as ModelAuth, Operation, SplitDescriptor, SplitVault,
+    };
     use cube::transmutative::codec::csv::{CSVEncode, CSVFlag};
     use cube::transmutative::hash::{Hash as CubeHash, HashTag};
     use cube::transmutative::musig::keyagg::MusigKeyAggCtx;
@@ -61,6 +72,20 @@ mod liftv2_regtest_tests {
         0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
         0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11, 0x11,
         0x11, 0x11,
+    ];
+
+    /// Bob's secret key, used for his claim output.
+    const BOB_SECRET: [u8; 32] = [
+        0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33,
+        0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33, 0x33,
+        0x33, 0x33,
+    ];
+
+    /// Carol's secret key, used for her claim output.
+    const CAROL_SECRET: [u8; 32] = [
+        0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+        0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55, 0x55,
+        0x55, 0x55,
     ];
 
     /// The Engine's deposit key. Never signs in these tests; it only enters the aggregate key.
@@ -684,5 +709,405 @@ mod liftv2_regtest_tests {
             "the cooperative output must be confirmed"
         );
         println!("cooperative key-path spend accepted in {accepted}");
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Node-gated: successor funding that commits a statement, and a beneficiary claim.
+    // ---------------------------------------------------------------------------------------
+
+    /// Returns the x-only key of a fixture secret.
+    fn xonly_of(secret: [u8; 32]) -> [u8; 32] {
+        let secp = Secp256k1::new();
+        Keypair::from_secret_key(
+            &secp,
+            &SecretKey::from_slice(&secret).expect("valid secret"),
+        )
+        .x_only_public_key()
+        .0
+        .serialize()
+    }
+
+    /// Signs a tapscript `OP_CHECKSIG` spend of a claim output.
+    fn sign_claim_spend(
+        statement_digest: [u8; 32],
+        beneficiary_key: [u8; 32],
+        beneficiary_secret: [u8; 32],
+        funding_outpoint: OutPoint,
+        prevout: &TxOut,
+        output_value: u64,
+        output_spk: ScriptBuf,
+    ) -> Transaction {
+        let script = claim_script(statement_digest, beneficiary_key);
+        let control_block =
+            claim_control_block(statement_digest, beneficiary_key).expect("claim control block");
+        let leaf_hash = bitcoin::taproot::TapLeafHash::from_byte_array(
+            cube::constructive::taproot::hash_tap_leaf(&script, 0xc0),
+        );
+
+        let mut tx = Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: funding_outpoint,
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(output_value),
+                script_pubkey: output_spk,
+            }],
+        };
+
+        let secp = Secp256k1::new();
+        let sighash = SighashCache::new(&tx)
+            .taproot_signature_hash(
+                0,
+                &Prevouts::All(std::slice::from_ref(prevout)),
+                None,
+                Some((leaf_hash, 0xffff_ffff)),
+                TapSighashType::Default,
+            )
+            .expect("sighash");
+        let message = Message::from_digest(sighash.to_byte_array());
+        let keypair = Keypair::from_secret_key(
+            &secp,
+            &SecretKey::from_slice(&beneficiary_secret).expect("valid secret"),
+        );
+        let signature = secp.sign_schnorr_no_aux_rand(&message, &keypair);
+        secp.verify_schnorr(&signature, &message, &keypair.x_only_public_key().0)
+            .expect("the claim signature must verify locally");
+
+        tx.input[0].witness =
+            Witness::from_slice(&[signature.serialize().to_vec(), script, control_block]);
+        tx
+    }
+
+    #[test]
+    fn successor_funding_binds_the_statement_and_the_beneficiary_claims() {
+        // 1 Skip without a node.
+        let Some(rpc) = regtest_client() else {
+            println!(
+                "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
+            );
+            return;
+        };
+        let _node_guard = node_test_guard();
+
+        // 2 Wallet and mature funds.
+        if rpc
+            .call::<serde_json::Value>("createwallet", &[json!("cube_liftv2")])
+            .is_err()
+        {
+            let _ = rpc.call::<serde_json::Value>("loadwallet", &[json!("cube_liftv2")]);
+        }
+        let mining_address: String = rpc.call("getnewaddress", &[]).expect("getnewaddress");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(101), json!(mining_address)])
+            .expect("mature coinbase");
+
+        // 3 Fund the deposit through the LiftV2 key path.
+        let taproot = liftv2_taproot();
+        let deposit_spk = ScriptBuf::from_bytes(taproot.spk().expect("spk"));
+        let deposit_address =
+            Address::from_script(&deposit_spk, Network::Regtest).expect("valid address");
+        let funding_txid: String = rpc
+            .call(
+                "sendtoaddress",
+                &[json!(deposit_address.to_string()), json!(0.5)],
+            )
+            .expect("sendtoaddress");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm deposit");
+
+        let wallet_tx: serde_json::Value = rpc
+            .call("gettransaction", &[json!(funding_txid), json!(true)])
+            .expect("gettransaction");
+        let deposit_tx: Transaction = bitcoin::consensus::deserialize(
+            &hex::decode(wallet_tx["hex"].as_str().expect("hex")).expect("hex decode"),
+        )
+        .expect("decode deposit transaction");
+        let (deposit_vout, deposit_prevout) = deposit_tx
+            .output
+            .iter()
+            .enumerate()
+            .find(|(_, output)| output.script_pubkey == deposit_spk)
+            .map(|(index, output)| (index as u32, output.clone()))
+            .expect("the deposit output must be present");
+        let deposit_outpoint = OutPoint {
+            txid: deposit_tx.compute_txid(),
+            vout: deposit_vout,
+        };
+
+        // 4 Derive the split from the reference model, not by hand.
+        const NETWORK_FEE_RESERVE: u64 = 2_000;
+        let gross_sats = deposit_prevout.value.to_sat() - NETWORK_FEE_RESERVE;
+        let execution_fee_sats: u64 = 5_000;
+        let amounts = split_amounts(gross_sats, execution_fee_sats).expect("valid split");
+        assert_eq!(
+            amounts.bob_sats + amounts.carol_sats + execution_fee_sats,
+            gross_sats
+        );
+
+        // 5 Build the accepted transition in the reference model and commit it in a manifest.
+        let bob_key = xonly_of(BOB_SECRET);
+        let carol_key = xonly_of(CAROL_SECRET);
+        let fee_key = [0x66u8; 32];
+
+        let descriptor = SplitDescriptor::new(
+            [0x11; 32],
+            [0x22; 32],
+            alice_xonly(),
+            bob_key,
+            carol_key,
+            fee_key,
+        );
+        let mut vault = SplitVault::new(Ledger::new(gross_sats, 0, 0, 0));
+        vault
+            .instantiate(
+                descriptor,
+                ModelAuth::new(Role::Owner, 1),
+                Operation::new(
+                    SplitVault::next_operation_id(1),
+                    SplitVault::payload_digest(b"instantiate"),
+                ),
+            )
+            .expect("model instantiate");
+        let parent_digest = vault.state_digest();
+        vault
+            .fund(
+                gross_sats,
+                execution_fee_sats,
+                ModelAuth::new(Role::Owner, 2),
+                Operation::new(
+                    SplitVault::next_operation_id(2),
+                    SplitVault::payload_digest(b"fund"),
+                ),
+            )
+            .expect("model fund");
+        let resulting_digest = vault.state_digest();
+
+        let manifest = TransitionManifest {
+            schema_version: MANIFEST_SCHEMA_VERSION,
+            profile: ReleaseProfile::ArgoSplitRegtest,
+            network_genesis_hash: [0x11; 32],
+            template_hash: cube::constructive::contracts::fixed_split_vault_v1::template_hash(),
+            circuit_id: [0x33; 32],
+            verifier_key_digest: [0x44; 32],
+            previous_state_digest: parent_digest,
+            resulting_state_digest: resulting_digest,
+            batch_sequence: 1,
+            anchors: vec![Anchor::new(
+                deposit_outpoint.txid.to_byte_array(),
+                deposit_outpoint.vout,
+            )],
+            entry_digest: [0x55; 32],
+            caller_key: alice_xonly(),
+            caller_sequence: 2,
+            operation_id: [0x66; 32],
+            payouts: vec![
+                Payout::new(bob_key, amounts.bob_sats, PayoutKind::BeneficiaryAllocation),
+                Payout::new(
+                    carol_key,
+                    amounts.carol_sats,
+                    PayoutKind::BeneficiaryAllocation,
+                ),
+                Payout::new(fee_key, execution_fee_sats, PayoutKind::ExecutionFee),
+            ],
+            setup_instance_id: [0x77; 32],
+            graph_template_version: 1,
+            challenge_config_digest: [0x88; 32],
+            recovery_package_digest: [0x99; 32],
+            batch_data_digest: [0xaa; 32],
+            availability_descriptor_digest: [0xbb; 32],
+        };
+        manifest.validate().expect("the manifest must be valid");
+        let statement_digest = manifest.statement_digest();
+
+        // 6 Build the successor funding transaction: it spends the deposit cooperatively and pays
+        //   each beneficiary a claim output that commits to the statement.
+        let mut successor = Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: deposit_outpoint,
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![
+                TxOut {
+                    value: Amount::from_sat(amounts.bob_sats),
+                    script_pubkey: ScriptBuf::from_bytes(
+                        claim_scriptpubkey(statement_digest, bob_key).expect("bob claim spk"),
+                    ),
+                },
+                TxOut {
+                    value: Amount::from_sat(amounts.carol_sats),
+                    script_pubkey: ScriptBuf::from_bytes(
+                        claim_scriptpubkey(statement_digest, carol_key).expect("carol claim spk"),
+                    ),
+                },
+                TxOut {
+                    value: Amount::from_sat(execution_fee_sats),
+                    script_pubkey: address_to_script(
+                        &rpc.call::<String>("getnewaddress", &[])
+                            .expect("fee address"),
+                    ),
+                },
+                TxOut {
+                    value: Amount::from_sat(0),
+                    script_pubkey: ScriptBuf::from_bytes(statement_op_return_script(
+                        statement_digest,
+                    )),
+                },
+            ],
+        };
+
+        // 6.a Sign the key path of the deposit with MuSig2.
+        let sighash = SighashCache::new(&successor)
+            .taproot_signature_hash(
+                0,
+                &Prevouts::All(std::slice::from_ref(&deposit_prevout)),
+                None,
+                None,
+                TapSighashType::Default,
+            )
+            .expect("sighash");
+        let (signature, agg_key_xonly) = liftv2_musig_sign(&taproot, sighash.to_byte_array());
+        let secp = Secp256k1::new();
+        secp.verify_schnorr(
+            &bitcoin::secp256k1::schnorr::Signature::from_slice(&signature).expect("signature"),
+            &Message::from_digest(sighash.to_byte_array()),
+            &bitcoin::secp256k1::XOnlyPublicKey::from_slice(&agg_key_xonly).expect("key"),
+        )
+        .expect("the successor signature must verify locally");
+        successor.input[0].witness = Witness::from_slice(&[signature.to_vec()]);
+
+        // 7 Bitcoin Core must accept the successor funding.
+        let successor_txid: String = rpc
+            .call(
+                "sendrawtransaction",
+                &[json!(bitcoin::consensus::encode::serialize_hex(&successor))],
+            )
+            .expect("the successor funding must be accepted");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("mine the successor funding");
+
+        // 8 The statement commitment must be readable from the mined transaction itself.
+        let block_hash: String = rpc
+            .call(
+                "getblockhash",
+                &[json!(rpc.call::<u64>("getblockcount", &[]).expect("count"))],
+            )
+            .expect("block hash");
+        let block: serde_json::Value = rpc
+            .call("getblock", &[json!(block_hash), json!(2)])
+            .expect("getblock");
+        let mined = block["tx"]
+            .as_array()
+            .expect("tx array")
+            .iter()
+            .find(|tx| tx["txid"] == json!(successor_txid))
+            .expect("the successor funding must be in the block");
+        let committed = mined["vout"]
+            .as_array()
+            .expect("vout array")
+            .iter()
+            .filter_map(|output| {
+                let hex_script = output["scriptPubKey"]["hex"].as_str()?;
+                let bytes = hex::decode(hex_script).ok()?;
+                parse_statement_op_return_script(&bytes)
+            })
+            .next()
+            .expect("the statement commitment must be on-chain");
+        assert_eq!(
+            committed, statement_digest,
+            "the on-chain commitment must be the statement digest"
+        );
+
+        // 9 Carol must not be able to spend Bob's claim output.
+        let bob_claim_prevout = successor.output[0].clone();
+        let bob_claim_outpoint = OutPoint {
+            txid: successor.compute_txid(),
+            vout: 0,
+        };
+        let carol_spend = sign_claim_spend(
+            statement_digest,
+            bob_key,
+            CAROL_SECRET,
+            bob_claim_outpoint,
+            &bob_claim_prevout,
+            bob_claim_prevout.value.to_sat() - 1_000,
+            address_to_script(
+                &rpc.call::<String>("getnewaddress", &[])
+                    .expect("carol dest"),
+            ),
+        );
+        let carol_result: serde_json::Value = rpc
+            .call(
+                "testmempoolaccept",
+                &[json!([bitcoin::consensus::encode::serialize_hex(
+                    &carol_spend
+                )])],
+            )
+            .expect("testmempoolaccept");
+        assert!(
+            !carol_result[0]["allowed"].as_bool().unwrap_or(false),
+            "another beneficiary must not spend Bob's claim: {carol_result}"
+        );
+
+        // 10 Bob spends his claim output, revealing the committed statement in the witness.
+        let bob_spend = sign_claim_spend(
+            statement_digest,
+            bob_key,
+            BOB_SECRET,
+            bob_claim_outpoint,
+            &bob_claim_prevout,
+            bob_claim_prevout.value.to_sat() - 1_000,
+            address_to_script(&rpc.call::<String>("getnewaddress", &[]).expect("bob dest")),
+        );
+        let bob_spend_txid: String = rpc
+            .call(
+                "sendrawtransaction",
+                &[json!(bitcoin::consensus::encode::serialize_hex(&bob_spend))],
+            )
+            .expect("Bob's claim spend must be accepted");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("mine the claim spend");
+
+        // 11 Read the spend back from the chain and confirm the witness revealed this statement.
+        let block_hash: String = rpc
+            .call(
+                "getblockhash",
+                &[json!(rpc.call::<u64>("getblockcount", &[]).expect("count"))],
+            )
+            .expect("block hash");
+        let block: serde_json::Value = rpc
+            .call("getblock", &[json!(block_hash), json!(2)])
+            .expect("getblock");
+        let mined_spend = block["tx"]
+            .as_array()
+            .expect("tx array")
+            .iter()
+            .find(|tx| tx["txid"] == json!(bob_spend_txid))
+            .expect("the claim spend must be in the block");
+
+        let witness = mined_spend["vin"][0]["txinwitness"]
+            .as_array()
+            .expect("witness array");
+        let revealed_script =
+            hex::decode(witness[1].as_str().expect("script item")).expect("script hex");
+        let (revealed_digest, revealed_key) =
+            parse_claim_script(&revealed_script).expect("the witness must reveal a claim script");
+        assert_eq!(
+            revealed_digest, statement_digest,
+            "the revealed script must commit to the statement"
+        );
+        assert_eq!(revealed_key, bob_key);
+        println!("successor funding {successor_txid}, Bob's claim {bob_spend_txid}");
     }
 }
