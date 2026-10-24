@@ -1,4 +1,7 @@
 use crate::executive::stack::{stack_error::StackError, stack_item::StackItem};
+use crate::inscriptive::coin_manager::errors::balance_update_errors::{
+    CMAccountBalanceDownError, CMContractBalanceUpError,
+};
 use std::fmt;
 
 /// A section of executable block in the `Contract`.
@@ -32,6 +35,21 @@ pub enum ExecutionError {
     PayableAllocationCallerIsNotAnAccountError,
     /// Payable with internal call error.
     PayableWithInternalCallError,
+    /// The payable caller is not a registered account.
+    PayableCallerNotRegisteredError([u8; 32]),
+    /// The payable caller does not hold the authorised value.
+    PayableCallerInsufficientFundsError {
+        /// Balance the caller actually held.
+        available_sats: u64,
+        /// Value the call authorised.
+        required_sats: u64,
+    },
+    /// The payable destination contract is not registered with the coin manager.
+    PayableContractNotRegisteredError([u8; 32]),
+    /// The caller debit failed after the value was validated.
+    PayableCallerBalanceDownError(CMAccountBalanceDownError),
+    /// The contract credit failed after the caller was debited.
+    PayableContractBalanceUpError(CMContractBalanceUpError),
     /// Invalid stack ending error.
     InvalidStackEndingError,
     /// Base ops price mismatch error.
@@ -84,6 +102,32 @@ impl fmt::Display for ExecutionError {
             }
             ExecutionError::PayableWithInternalCallError => {
                 write!(f, "Payable with internal call")
+            }
+            ExecutionError::PayableCallerNotRegisteredError(account_key) => {
+                write!(f, "Payable caller is not a registered account: {:?}", account_key)
+            }
+            ExecutionError::PayableCallerInsufficientFundsError {
+                available_sats,
+                required_sats,
+            } => {
+                write!(
+                    f,
+                    "Payable caller holds {} sats but the call authorised {} sats",
+                    available_sats, required_sats
+                )
+            }
+            ExecutionError::PayableContractNotRegisteredError(contract_id) => {
+                write!(
+                    f,
+                    "Payable destination contract is not registered: {:?}",
+                    contract_id
+                )
+            }
+            ExecutionError::PayableCallerBalanceDownError(error) => {
+                write!(f, "Payable caller debit failed: {:?}", error)
+            }
+            ExecutionError::PayableContractBalanceUpError(error) => {
+                write!(f, "Payable contract credit failed: {:?}", error)
             }
             ExecutionError::InvalidStackEndingError => {
                 write!(f, "Invalid stack ending")

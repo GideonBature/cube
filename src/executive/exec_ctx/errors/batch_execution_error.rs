@@ -54,6 +54,11 @@ pub enum BatchExecutionError {
     DeploySighashError(DeploySighashError),
     ConfigExecutionError(ConfigExecutionError),
     ConfigSighashError(ConfigSighashError),
+    /// An entry kind reached batch execution without a wired executor.
+    ///
+    /// Deterministic rejection at the boundary instead of a panic, so that a rejected batch
+    /// leaves the accepted state untouched.
+    UnsupportedEntryKindError(&'static str),
     AggregateBLSSignatureVerificationError,
     ExecutedEntryIdError,
     ApplyChangesError(ApplyChangesError),

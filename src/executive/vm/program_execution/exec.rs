@@ -182,30 +182,65 @@ pub async fn execute(
     // Get the payable allocation value.
     let payable_allocation_value = match executable_method.payable_allocation_value(&arg_values) {
         Some(payable_allocation_value) => {
-            // If a payable value is allocted it must be greater than MIN_PAYABLE_ALLOCATION.
+            // If a payable value is allocated it must be greater than MIN_PAYABLE_ALLOCATION.
             if payable_allocation_value < MIN_PAYABLE_ALLOCATION_VALUE {
                 return Err(ExecutionError::MinPayableAllocationError);
             }
 
-            // TODO: CHECK ENOUGH BALANCE.
-
-            // If a payable value is allocted, the caller must also be an account.
-            let _caller_key = match caller {
+            // If a payable value is allocated, the caller must also be an account.
+            let payable_caller_key = match caller {
                 Caller::Account(key) => key,
                 Caller::Contract(_) => {
                     return Err(ExecutionError::PayableAllocationCallerIsNotAnAccountError);
                 }
             };
 
-            // If a payable value is allocted, this cannot be an internal call.
+            // If a payable value is allocated, this cannot be an internal call.
             if internal {
                 return Err(ExecutionError::PayableWithInternalCallError);
             }
 
-            // Insert the allocation into the accountant.
-            //if let Err(error) = accountant.insert_alloc(caller_key, payable_allocation_value) {
-            //    return Err(ExecutionError::AccountantAllocationInsertionError(error));
-            //}
+            // Validate both sides of the transfer before mutating either balance, so that a
+            // rejection here cannot leave a half-applied value movement behind.
+            {
+                let _coin_manager = coin_manager.lock().await;
+
+                // The caller must be a registered account holding the full value.
+                let caller_balance_in_satoshis = _coin_manager
+                    .get_account_balance(payable_caller_key)
+                    .ok_or(ExecutionError::PayableCallerNotRegisteredError(
+                        payable_caller_key,
+                    ))?;
+
+                if caller_balance_in_satoshis < u64::from(payable_allocation_value) {
+                    return Err(ExecutionError::PayableCallerInsufficientFundsError {
+                        available_sats: caller_balance_in_satoshis,
+                        required_sats: u64::from(payable_allocation_value),
+                    });
+                }
+
+                // The contract must be registered so that the credit cannot fail afterwards.
+                if _coin_manager
+                    .get_contract_balance(contract_id)
+                    .is_none()
+                {
+                    return Err(ExecutionError::PayableContractNotRegisteredError(contract_id));
+                }
+            }
+
+            // Move the value into the contract. The caller is debited first: a call can never
+            // credit value it has not taken from its caller.
+            {
+                let mut _coin_manager = coin_manager.lock().await;
+
+                _coin_manager
+                    .account_balance_down(payable_caller_key, u64::from(payable_allocation_value))
+                    .map_err(ExecutionError::PayableCallerBalanceDownError)?;
+
+                _coin_manager
+                    .contract_balance_up(contract_id, u64::from(payable_allocation_value))
+                    .map_err(ExecutionError::PayableContractBalanceUpError)?;
+            }
 
             payable_allocation_value
         }

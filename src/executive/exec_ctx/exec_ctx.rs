@@ -721,7 +721,15 @@ impl ExecCtx {
                         Err(error) => return Err(BatchExecutionError::ConfigExecutionError(error)),
                     }
                 }
-                _ => panic!("Not implemented yet."),
+                // 27.2.f The `Entry` is a `Call`.
+                //
+                // The `Call` execution path is not reachable yet. Refuse it deterministically
+                // instead of panicking: a panic here aborts batch execution with partially
+                // applied deltas across six managers, which is strictly worse than a rejection.
+                // See `ProgramExecCtx` for the executor that still has to be wired to this arm.
+                Entry::Call(_) => {
+                    return Err(BatchExecutionError::UnsupportedEntryKindError("call"));
+                }
             }
         }
 
