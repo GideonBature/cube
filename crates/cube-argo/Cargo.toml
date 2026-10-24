@@ -1,0 +1,21 @@
+[package]
+name = "cube-argo"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# Pinned exactly as recorded in docs/implementation.md section 2.
+argo = { git = "https://github.com/idealgroup/argo", rev = "aa28ba884f9af3d41265774a882d4efd9f4d9b95" }
+
+# Argo declares `blake3 = "1.8.2"` with `traits-preview`, and ark-ff 0.5 needs
+# `blake3::Hasher: FixedOutputReset`. That bound no longer holds in blake3 1.8.7, so a fresh
+# lockfile fails to build Argo. The version is held here instead of forking.
+blake3 = { version = "=1.8.2", features = ["traits-preview"] }
+
+# Same major version Argo uses, so the canonical byte form is the same type family.
+ark-bn254 = "0.5.0"
+ark-ff = "0.5.0"
+ark-serialize = "0.5.0"
+ark-std = { version = "0.5.0", features = ["getrandom"] }
+sha2 = "0.10"
