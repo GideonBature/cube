@@ -39,15 +39,19 @@
 //! - [`GarblingConfig`]: the entropy and disclosure-secret preconditions for setup.
 //! - [`GarbledVerifier`]: setup and evaluation of Argo's table, with a three-way outcome instead of
 //!   a boolean.
+//! - [`statement_public_input`]: the proposed projection of a 32-byte statement digest onto Argo's
+//!   single public scalar, with its loss stated rather than assumed.
 //! - [`register_verifier_key_identity`]: the process-wide guard for upstream's unkeyed cache.
 
 mod convert;
 mod garbling;
+mod public_input;
 
 pub use convert::{Groth16Proof, Groth16VerifyingKey};
 pub use garbling::{
     GarbledVerifier, SetupInstanceId, VerifierOutcome, RECOMMENDED_SETUP_STACK_BYTES,
 };
+pub use public_input::statement_public_input;
 
 use argo::garble::groth16_verifier::VerifierKey;
 use ark_bn254::{Fq, Fq12, G1Affine, G2Affine};

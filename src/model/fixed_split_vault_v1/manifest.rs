@@ -137,8 +137,10 @@ impl Anchor {
 ///
 /// - It does **not** derive itself from a `SplitVault` transition. A derivation function has to
 ///   decide how obligations and fee rules are computed, which is design work with its own review.
-/// - It does **not** implement the Argo public-input mapping `x = OS2IP_BE(D) mod r`. That mapping
-///   is unassessed under CRYPTO-01 and committing to it here would imply a settled construction.
+/// - It does **not** implement the Argo public-input mapping `x = OS2IP_BE(D) mod r`. The adapter in
+///   `crates/cube-argo` carries that projection as a proposal with its loss measured; keeping it out
+///   of the manifest means changing the adapter cannot silently change a committed digest. CRYPTO-01
+///   stays open under either arrangement.
 /// - It does **not** include the consumed-operation set, for the same reason the state digest does
 ///   not: it is unbounded.
 #[derive(Debug, Clone, PartialEq, Eq)]

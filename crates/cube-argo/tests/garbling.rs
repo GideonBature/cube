@@ -11,15 +11,21 @@
 
 mod common;
 
-use ark_bn254::{Fr, G1Affine};
+use ark_bn254::G1Affine;
 use ark_ec::{AffineRepr, CurveGroup};
 use cube_argo::{
-    reset_verifier_key_identity, ArgoAdapterError, GarbledVerifier, GarblingConfig,
-    PreparedVerifierKey, VerifierOutcome, RECOMMENDED_SETUP_STACK_BYTES,
+    reset_verifier_key_identity, statement_public_input, ArgoAdapterError, GarbledVerifier,
+    GarblingConfig, PreparedVerifierKey, VerifierOutcome, RECOMMENDED_SETUP_STACK_BYTES,
 };
 
 /// A non-zero disclosure secret.
 const SECRET: [u8; 32] = [0x5a; 32];
+
+/// The statement digest the accepted proof is checked against.
+const DIGEST: [u8; 32] = [0x11; 32];
+
+/// A different statement digest, which must not be accepted by the same proof.
+const OTHER_DIGEST: [u8; 32] = [0x12; 32];
 
 #[test]
 fn garbled_verifier_accepts_valid_proofs_and_discloses_on_failure() {
@@ -38,7 +44,8 @@ fn garbling_scenarios() {
     // Start from a clean process-wide verifier-key identity.
     reset_verifier_key_identity();
 
-    let x = Fr::from(19u64);
+    let x = statement_public_input(DIGEST);
+    assert_ne!(x, statement_public_input(OTHER_DIGEST));
     let (key, proof) = common::fixture(101, x);
     let prepared = PreparedVerifierKey::from_groth16_verifying_key(&key).expect("convert");
 
@@ -85,9 +92,10 @@ fn garbling_scenarios() {
         VerifierOutcome::Accepted
     );
 
-    // 4 A different public scalar breaks the equation and discloses the configured secret.
+    // 4 A different statement digest projects to a different scalar, breaks the equation and
+    //   discloses the configured secret.
     let mut wrong_x = proof;
-    wrong_x.x = x + Fr::from(1u64);
+    wrong_x.x = statement_public_input(OTHER_DIGEST);
     assert!(!common::canonical_identity_holds(&key, &wrong_x));
     assert_eq!(
         verifier.evaluate(&wrong_x).expect("evaluate"),

@@ -83,6 +83,8 @@ pub struct Groth16Proof {
     /// Proof element `C`.
     pub c: G1Affine,
     /// The single public input, as a scalar in `Fr`.
+    ///
+    /// [`crate::statement_public_input`] is the proposed derivation from a statement digest.
     pub x: Fr,
 }
 
