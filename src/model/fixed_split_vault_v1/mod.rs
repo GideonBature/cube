@@ -23,6 +23,7 @@
 
 pub mod amounts;
 pub mod codec;
+pub mod derive;
 pub mod error;
 pub mod instance;
 pub mod manifest;
@@ -33,6 +34,7 @@ pub use amounts::{split_amounts, SplitAmounts};
 pub use codec::SplitState;
 pub use error::{InvariantViolation, SplitDecodeError, SplitVaultError};
 pub use instance::{SplitDescriptor, SplitInstance};
+pub use derive::{derive_manifest, DeriveError, ManifestContext};
 pub use manifest::{
     Anchor, ManifestError, Payout, PayoutKind, ReleaseProfile, TransitionManifest,
     MANIFEST_SCHEMA_VERSION, MAX_ANCHORS, MAX_PAYOUTS, STATEMENT_DIGEST_TAG,

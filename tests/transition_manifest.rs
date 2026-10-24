@@ -9,10 +9,15 @@
 
 #[cfg(test)]
 mod transition_manifest_tests {
+    use cube::model::fixed_split_vault_v1::codec::SplitState;
+    use cube::model::fixed_split_vault_v1::derive::{
+        derive_manifest, DeriveError, ManifestContext,
+    };
     use cube::model::fixed_split_vault_v1::manifest::{
         ManifestError, PayoutKind, ReleaseProfile, TransitionManifest, MANIFEST_SCHEMA_VERSION,
     };
-    use cube::model::fixed_split_vault_v1::types::{Ledger, Role};
+    use cube::model::fixed_split_vault_v1::types::{Ledger, Phase, Role};
+    use cube::model::fixed_split_vault_v1::Transition;
     use cube::model::fixed_split_vault_v1::{
         split_amounts, Auth, Operation, SplitDescriptor, SplitVault,
     };
@@ -400,5 +405,262 @@ mod transition_manifest_tests {
         // 32 operation id, 1 payout count, 3 payouts of 41, 32 setup id, 2 graph version,
         // 32 challenge config, 32 recovery package, 32 batch data, 32 availability descriptor.
         assert_eq!(fixture().encode().len(), 665);
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Derivation from an accepted transition
+    // ---------------------------------------------------------------------------------------
+
+    /// Returns a context matching the fixture's environment fields.
+    fn fixture_context() -> ManifestContext {
+        ManifestContext {
+            profile: ReleaseProfile::ArgoSplitRegtest,
+            network_genesis_hash: NETWORK_GENESIS_HASH,
+            template_hash: TEMPLATE_HASH,
+            circuit_id: CIRCUIT_ID,
+            verifier_key_digest: VERIFIER_KEY_DIGEST,
+            batch_sequence: 101,
+            anchors: vec![
+                cube::model::fixed_split_vault_v1::Anchor::new(ANCHOR_TXID, 0),
+                cube::model::fixed_split_vault_v1::Anchor::new([0xdd; 32], 3),
+            ],
+            entry_digest: ENTRY_DIGEST,
+            setup_instance_id: SETUP_INSTANCE_ID,
+            graph_template_version: 1,
+            challenge_config_digest: CHALLENGE_CONFIG_DIGEST,
+            recovery_package_digest: RECOVERY_PACKAGE_DIGEST,
+            batch_data_digest: BATCH_DATA_DIGEST,
+            availability_descriptor_digest: AVAILABILITY_DESCRIPTOR_DIGEST,
+        }
+    }
+
+    /// Returns the states around a real `FundSplit`, plus the transition, authorization and
+    /// operation, using the fixture's operation id.
+    fn funded_transition() -> (SplitState, Transition, Auth, Operation, SplitState) {
+        let descriptor = SplitDescriptor::new(
+            NETWORK_GENESIS_HASH,
+            TEMPLATE_HASH,
+            ALICE_KEY,
+            BOB_KEY,
+            CAROL_KEY,
+            FEE_KEY,
+        );
+
+        let mut vault = SplitVault::new(Ledger::new(GROSS_SATS, 0, 0, 0));
+        vault
+            .instantiate(
+                descriptor,
+                Auth::new(Role::Owner, 1),
+                Operation::new(
+                    SplitVault::next_operation_id(1),
+                    SplitVault::payload_digest(b"instantiate"),
+                ),
+            )
+            .expect("instantiate");
+        let parent = vault.state();
+
+        let auth = Auth::new(Role::Owner, 2);
+        let operation = Operation::new(OPERATION_ID, SplitVault::payload_digest(b"fund"));
+        let transition = vault
+            .fund(GROSS_SATS, EXECUTION_FEE_SATS, auth, operation)
+            .expect("fund");
+        let resulting = vault.state();
+
+        (parent, transition, auth, operation, resulting)
+    }
+
+    #[test]
+    fn derivation_reproduces_the_frozen_manifest() {
+        let (parent, transition, auth, operation, resulting) = funded_transition();
+
+        let derived = derive_manifest(
+            &fixture_context(),
+            &parent,
+            &transition,
+            auth,
+            operation,
+            &resulting,
+        )
+        .expect("the transition must be derivable");
+
+        // The derived manifest must equal the hand-written fixture, which means it also
+        // reproduces the frozen statement digest.
+        assert_eq!(derived, fixture());
+        assert_eq!(
+            hex::encode(derived.statement_digest()),
+            "4a7f0624c1a7ecc85e607c00545b998265eabae22fcf3111e4db0c2243acaa32"
+        );
+    }
+
+    #[test]
+    fn derivation_of_a_redemption_emits_one_native_successor() {
+        let descriptor = SplitDescriptor::new(
+            NETWORK_GENESIS_HASH,
+            TEMPLATE_HASH,
+            ALICE_KEY,
+            BOB_KEY,
+            CAROL_KEY,
+            FEE_KEY,
+        );
+
+        let mut vault = SplitVault::new(Ledger::new(GROSS_SATS, 0, 0, 0));
+        vault
+            .instantiate(
+                descriptor,
+                Auth::new(Role::Owner, 1),
+                Operation::new(
+                    SplitVault::next_operation_id(1),
+                    SplitVault::payload_digest(b"instantiate"),
+                ),
+            )
+            .expect("instantiate");
+        vault
+            .fund(
+                GROSS_SATS,
+                EXECUTION_FEE_SATS,
+                Auth::new(Role::Owner, 2),
+                Operation::new(
+                    SplitVault::next_operation_id(2),
+                    SplitVault::payload_digest(b"fund"),
+                ),
+            )
+            .expect("fund");
+
+        // Bob redeems.
+        let parent = vault.state();
+        let auth = Auth::new(Role::Bob, 1);
+        let operation = Operation::new(
+            SplitVault::next_operation_id(3),
+            SplitVault::payload_digest(b"redeem"),
+        );
+        let transition = vault.redeem(auth, operation).expect("redeem");
+        let resulting = vault.state();
+
+        let derived = derive_manifest(
+            &fixture_context(),
+            &parent,
+            &transition,
+            auth,
+            operation,
+            &resulting,
+        )
+        .expect("the redemption must be derivable");
+
+        // Exactly one payout: Bob's key, his whole share, as a native successor.
+        let amounts = split_amounts(GROSS_SATS, EXECUTION_FEE_SATS).expect("split");
+        assert_eq!(derived.payouts.len(), 1);
+        assert_eq!(derived.payouts[0].recipient_key, BOB_KEY);
+        assert_eq!(derived.payouts[0].amount_sats, amounts.bob_sats);
+        assert_eq!(derived.payouts[0].kind, PayoutKind::NativeSuccessor);
+        assert_eq!(derived.caller_key, BOB_KEY);
+        assert_eq!(derived.caller_sequence, 1);
+        assert_eq!(derived.previous_state_digest, parent.digest(),);
+        assert_eq!(derived.resulting_state_digest, resulting.digest());
+    }
+
+    #[test]
+    fn derivation_refuses_transitions_that_do_not_match_the_state() {
+        let (parent, transition, auth, operation, resulting) = funded_transition();
+
+        // 1 A replay changes nothing.
+        assert_eq!(
+            derive_manifest(
+                &fixture_context(),
+                &parent,
+                &Transition::Replayed {
+                    operation_id: operation.id
+                },
+                auth,
+                operation,
+                &resulting,
+            ),
+            Err(DeriveError::NoStateChange)
+        );
+
+        // 2 Identical states are not a transition.
+        assert_eq!(
+            derive_manifest(
+                &fixture_context(),
+                &resulting,
+                &transition,
+                auth,
+                operation,
+                &resulting,
+            ),
+            Err(DeriveError::StatesAreIdentical)
+        );
+
+        // 3 A stale authorization sequence cannot be committed.
+        assert_eq!(
+            derive_manifest(
+                &fixture_context(),
+                &parent,
+                &transition,
+                Auth::new(Role::Owner, 7),
+                operation,
+                &resulting,
+            ),
+            Err(DeriveError::SequenceMismatch {
+                role: Role::Owner,
+                authorized: 7,
+                recorded: 2,
+            })
+        );
+
+        // 4 A funding cannot be derived from a parent that is already allocated.
+        //   The parent is perturbed so the two digests differ and the funding branch is reached.
+        let mut allocated_parent = resulting.clone();
+        if let Some(instance) = allocated_parent.instance.as_mut() {
+            instance.instance_sequence += 1;
+        }
+        assert_eq!(
+            derive_manifest(
+                &fixture_context(),
+                &allocated_parent,
+                &transition,
+                auth,
+                operation,
+                &resulting,
+            ),
+            Err(DeriveError::FundedFromNonEmptyParent {
+                phase_tag: Phase::Allocated.tag(),
+            })
+        );
+
+        // 5 A transition whose reported amounts disagree with the state cannot be committed.
+        let reported = match &transition {
+            Transition::Funded { amounts } => *amounts,
+            other => panic!("the fixture must be a funding, got {other:?}"),
+        };
+        let mut lying = reported;
+        lying.bob_sats += 1;
+        assert_eq!(
+            derive_manifest(
+                &fixture_context(),
+                &parent,
+                &Transition::Funded { amounts: lying },
+                auth,
+                operation,
+                &resulting,
+            ),
+            Err(DeriveError::AmountMismatch {
+                role: Role::Bob,
+                transition_sats: reported.bob_sats + 1,
+                state_sats: reported.bob_sats,
+            })
+        );
+    }
+
+    #[test]
+    fn derivation_enforces_the_anchor_bound() {
+        let (parent, transition, auth, operation, resulting) = funded_transition();
+
+        let mut context = fixture_context();
+        context.anchors.clear();
+
+        assert!(matches!(
+            derive_manifest(&context, &parent, &transition, auth, operation, &resulting),
+            Err(DeriveError::ContextBounds { .. })
+        ));
     }
 }
