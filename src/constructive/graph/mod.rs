@@ -19,9 +19,9 @@
 //!   remaining gap are specified in `docs/bind_01.md`.
 //!
 //! Not implemented: the `CooperativeSettle` edge. A two-leaf claim keeps its recovery branch in a
-//! v2 `ClaimRecoveryPackage` (`PACKAGE_SCHEMA_VERSION_V2`); `Assert`, `Take` and `Disprove` are
-//! attached to that claim shape, while the v1 package continues to describe the single-leaf claim.
-//! `GRAPH-01` therefore stays open.
+//! v2 `ClaimRecoveryPackage` (`PACKAGE_SCHEMA_VERSION_V2`); `SuccessorFunding::new_with_assertions`
+//! can emit that shape, and `Assert`, `Take` and `Disprove` are attached to it. The v1 package
+//! continues to describe the single-leaf claim. `GRAPH-01` therefore stays open.
 //!
 //! # Authorization
 //!

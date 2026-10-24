@@ -177,6 +177,11 @@ tapscript cannot express without an additional construction.
   profile: protection comes from the participant's own setup and signature.
 - **Graph economics.** Which output is contested (a claim, a fee output or an operator bond) is a
   graph decision. The mechanism does not assume an answer, and `GRAPH-01` stays open.
+- **Successor integration.** `SuccessorFunding::new_with_assertions` takes one binding per
+  beneficiary allocation and emits the two-leaf claim for each; `verify_with_assertions` checks the
+  same. `tests/successor_v2_regtest.rs` runs the path on regtest: a wallet-funded deposit, a
+  successor with two bindings, an `Assert` that is disproved, and a recovery through the v2
+  package. The LiftV2 MuSig2 successor path itself still creates v1 claims.
 - **Claim v2 recovery.** The assertion leaf changes the claim taproot. `ClaimRecoveryPackage`
   schema v2 now carries the binding and the two-leaf recovery control block, so the recovery path
   survives; v1 packages still describe single-leaf claims. `tests/assertion_regtest.rs` funds a

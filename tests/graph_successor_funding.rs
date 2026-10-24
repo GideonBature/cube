@@ -6,7 +6,9 @@
 //! against.
 
 use bitcoin::hashes::Hash;
-use bitcoin::{OutPoint, ScriptBuf, Sequence, Transaction, Txid};
+use bitcoin::{Amount, OutPoint, ScriptBuf, Sequence, Transaction, TxOut, Txid};
+use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
+use cube::constructive::graph::claim_recovery::ClaimRecovery;
 use cube::constructive::graph::successor_funding::{
     DepositAnchor, FeeBounds, FundingOutput, SuccessorFunding, SuccessorFundingError,
 };
@@ -17,6 +19,8 @@ use cube::model::fixed_split_vault_v1::manifest::{
 const BOB_KEY: [u8; 32] = [0x21; 32];
 const CAROL_KEY: [u8; 32] = [0x22; 32];
 const FEE_KEY: [u8; 32] = [0x23; 32];
+const BOB_BINDING: [u8; 32] = [0xb1; 32];
+const CAROL_BINDING: [u8; 32] = [0xc1; 32];
 
 const BOB_SATS: u64 = 70_000;
 const CAROL_SATS: u64 = 29_900;
@@ -79,6 +83,38 @@ fn funding() -> SuccessorFunding {
         .expect("the fixture must fund")
 }
 
+/// One assertion binding per beneficiary allocation, in payout order.
+fn bindings() -> Vec<[u8; 32]> {
+    vec![BOB_BINDING, CAROL_BINDING]
+}
+
+/// The descriptor the v2 builder produces for the fixture.
+fn funding_v2() -> SuccessorFunding {
+    SuccessorFunding::new_with_assertions(
+        &manifest(),
+        deposit(),
+        MINER_FEE_SATS,
+        Some(fee_script()),
+        &bindings(),
+    )
+    .expect("the v2 fixture must fund")
+}
+
+/// Verifies a transaction with the fixture's v2 bindings.
+fn verify_v2(
+    transaction: &Transaction,
+    assertion_bindings: &[[u8; 32]],
+) -> Result<SuccessorFunding, SuccessorFundingError> {
+    SuccessorFunding::verify_with_assertions(
+        transaction,
+        &manifest(),
+        deposit().outpoint,
+        DEPOSIT_SATS,
+        wide_bounds(),
+        assertion_bindings,
+    )
+}
+
 /// The accept-everything fee range used where the fee itself is not under test.
 fn wide_bounds() -> FeeBounds {
     FeeBounds::new(0, 10_000)
@@ -109,10 +145,12 @@ fn successor_funding_builds_the_manifest_obligations_in_order() {
         match &outputs[index] {
             FundingOutput::Claim {
                 beneficiary_key,
+                assertion_binding_digest,
                 amount_sats,
                 script_pubkey,
             } => {
                 assert_eq!(*beneficiary_key, key);
+                assert_eq!(*assertion_binding_digest, None);
                 assert_eq!(*amount_sats, if index == 0 { BOB_SATS } else { CAROL_SATS });
                 let expected =
                     cube::constructive::contracts::fixed_split_vault_v1::claim::claim_scriptpubkey(
@@ -163,6 +201,147 @@ fn successor_funding_builds_the_manifest_obligations_in_order() {
             .map(|output| output.value.to_sat())
             .collect::<Vec<_>>(),
         vec![BOB_SATS, CAROL_SATS, FEE_SATS, 0]
+    );
+}
+
+#[test]
+fn successor_funding_can_carry_assertion_bindings() {
+    let descriptor = funding_v2();
+    let outputs = descriptor.outputs();
+
+    for (index, key, binding) in [
+        (0usize, BOB_KEY, BOB_BINDING),
+        (1, CAROL_KEY, CAROL_BINDING),
+    ] {
+        match &outputs[index] {
+            FundingOutput::Claim {
+                beneficiary_key,
+                assertion_binding_digest,
+                amount_sats,
+                script_pubkey,
+            } => {
+                assert_eq!(*beneficiary_key, key);
+                assert_eq!(*assertion_binding_digest, Some(binding));
+                assert_eq!(*amount_sats, if index == 0 { BOB_SATS } else { CAROL_SATS });
+                let expected = cube::constructive::contracts::fixed_split_vault_v1::claim::assertion_claim_scriptpubkey(
+                    descriptor.statement_digest(),
+                    binding,
+                    key,
+                )
+                .expect("assertion claim script");
+                assert_eq!(*script_pubkey, ScriptBuf::from_bytes(expected));
+            }
+            other => panic!("output {index} must be a claim, got {other:?}"),
+        }
+    }
+
+    // The v2 claims are structurally different from the v1 claims.
+    assert_ne!(
+        outputs[0].script_pubkey(),
+        funding().outputs()[0].script_pubkey()
+    );
+
+    // The same bindings verify the transaction; the v1 verifier refuses it.
+    let parsed = verify_v2(&descriptor.transaction(), &bindings()).expect("v2 verify");
+    assert_eq!(parsed, descriptor);
+    assert_eq!(
+        verify(&descriptor.transaction()),
+        Err(SuccessorFundingError::PayoutOutputMismatch { index: 0 })
+    );
+}
+
+#[test]
+fn a_v2_successor_output_is_recoverable_through_a_v2_package() {
+    let descriptor = funding_v2();
+
+    for (index, key, binding) in [
+        (0usize, BOB_KEY, BOB_BINDING),
+        (1, CAROL_KEY, CAROL_BINDING),
+    ] {
+        let output = &descriptor.outputs()[index];
+        let anchor = Anchor::new([0x01; 32], index as u32);
+        let package = ClaimRecoveryPackage::new_with_assertion(
+            ReleaseProfile::ArgoSplitRegtest,
+            [0x90 + index as u8; 32],
+            None,
+            key,
+            [0x22; 32],
+            [0x33; 32],
+            descriptor.statement_digest(),
+            binding,
+            output.amount_sats(),
+            Some(anchor),
+            1_000,
+            2,
+            [0xbb; 32],
+            [0xcc; 32],
+        )
+        .expect("the v2 package must construct");
+
+        // The successor output and the package derive the same two-leaf claim.
+        assert_eq!(
+            package.claim_scriptpubkey(),
+            Some(output.script_pubkey().as_bytes().to_vec())
+        );
+
+        let prevout = TxOut {
+            value: Amount::from_sat(output.amount_sats()),
+            script_pubkey: output.script_pubkey().clone(),
+        };
+        let recovery =
+            ClaimRecovery::new(&package, &prevout, ScriptBuf::from_bytes(vec![0x51]), 500)
+                .expect("the recovery spend must build");
+        assert_eq!(
+            recovery.claim_outpoint(),
+            OutPoint {
+                txid: Txid::from_byte_array([0x01; 32]),
+                vout: index as u32,
+            }
+        );
+    }
+}
+
+#[test]
+fn assertion_bindings_are_per_beneficiary_and_exact() {
+    let transaction = funding_v2().transaction();
+
+    // 1 A non-empty vector must have one entry per beneficiary.
+    assert_eq!(
+        SuccessorFunding::new_with_assertions(
+            &manifest(),
+            deposit(),
+            MINER_FEE_SATS,
+            Some(fee_script()),
+            &[BOB_BINDING],
+        ),
+        Err(SuccessorFundingError::AssertionBindingCountMismatch {
+            expected: 2,
+            found: 1,
+        })
+    );
+
+    // 2 A zero binding is not a digest.
+    assert_eq!(
+        SuccessorFunding::new_with_assertions(
+            &manifest(),
+            deposit(),
+            MINER_FEE_SATS,
+            Some(fee_script()),
+            &[[0u8; 32], CAROL_BINDING],
+        ),
+        Err(SuccessorFundingError::ZeroAssertionBinding { index: 0 })
+    );
+
+    // 3 Swapping the two bindings puts each claim at the wrong key.
+    assert_eq!(
+        verify_v2(&transaction, &[CAROL_BINDING, BOB_BINDING]),
+        Err(SuccessorFundingError::PayoutOutputMismatch { index: 0 })
+    );
+
+    // 4 Changing one binding changes that output's key.
+    assert_eq!(
+        verify_v2(&transaction, &[[0xb2u8; 32], CAROL_BINDING]),
+        Err(SuccessorFundingError::PayoutOutputMismatch { index: 0 })
     );
 }
 

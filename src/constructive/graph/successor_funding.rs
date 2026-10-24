@@ -10,6 +10,10 @@
 //! output n: OP_RETURN carrying the statement digest
 //! ```
 //!
+//! A beneficiary output is a single-leaf v1 claim by default. [`SuccessorFunding::new_with_assertions`]
+//! takes one assertion binding per beneficiary and emits the two-leaf v2 claim instead, without
+//! changing the amount, order or statement commitment.
+//!
 //! # The rule this module enforces
 //!
 //! [`SuccessorFunding::verify`] takes the counterparty's *transaction* — not a descriptor built by
@@ -32,6 +36,9 @@
 //!   fee rate and the transaction's vsize is caller policy.
 //! - **The dispute branch.** `ExitRequest`, `Assert`, `Take` and `Disprove` are separate roles, so
 //!   `GRAPH-01` stays open.
+//! - **The assertion binding's contents.** A supplied binding is placed in the claim output; this
+//!   module does not interpret the digest. The assertion role and the v2 recovery package check
+//!   what it commits.
 //! - **Signing.** No key material is touched. The descriptor says what may be signed, not how.
 //!
 //! # Why the remainder must be the miner fee
@@ -42,7 +49,7 @@
 //! names or the fee both signers see in the sighash.
 
 use crate::constructive::contracts::fixed_split_vault_v1::claim::{
-    claim_scriptpubkey, statement_op_return_script,
+    assertion_claim_scriptpubkey, claim_scriptpubkey, statement_op_return_script,
 };
 use crate::model::fixed_split_vault_v1::manifest::{ManifestError, PayoutKind, TransitionManifest};
 use bitcoin::absolute::LockTime;
@@ -99,13 +106,17 @@ impl FeeBounds {
 /// One output of the successor funding, in transaction order.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum FundingOutput {
-    /// A beneficiary allocation, spendable only through the claim script.
+    /// A beneficiary allocation, spendable through the recovery leaf (and, for v2, the assertion
+    /// leaf).
     Claim {
         /// The beneficiary the claim is bound to.
         beneficiary_key: [u8; 32],
+        /// The assertion binding for a two-leaf claim, or `None` for a single-leaf claim.
+        assertion_binding_digest: Option<[u8; 32]>,
         /// The allocation in satoshis.
         amount_sats: u64,
-        /// The taproot output key script committing to the statement and the key.
+        /// The taproot output key script committing to the statement, the key and, when present,
+        /// the assertion binding.
         script_pubkey: ScriptBuf,
     },
     /// The disclosed execution fee, paid to the fee account.
@@ -168,27 +179,54 @@ impl SuccessorFunding {
         miner_fee_sats: u64,
         execution_fee_script: Option<ScriptBuf>,
     ) -> Result<Self, SuccessorFundingError> {
+        Self::new_with_assertions(manifest, deposit, miner_fee_sats, execution_fee_script, &[])
+    }
+
+    /// Builds a successor whose beneficiary claims also carry an assertion leaf.
+    ///
+    /// `assertion_bindings` holds one binding digest per beneficiary allocation, in the order the
+    /// allocations appear in the manifest. An empty slice keeps the v1 single-leaf claims; a
+    /// non-empty slice must have exactly one entry per beneficiary. The binding itself commits the
+    /// claim id and the assertion terms, so it is not part of the manifest's entitlement encoding.
+    pub fn new_with_assertions(
+        manifest: &TransitionManifest,
+        deposit: DepositAnchor,
+        miner_fee_sats: u64,
+        execution_fee_script: Option<ScriptBuf>,
+        assertion_bindings: &[[u8; 32]],
+    ) -> Result<Self, SuccessorFundingError> {
         // 1 A malformed manifest cannot produce a well-formed funding transaction.
         manifest
             .validate()
             .map_err(SuccessorFundingError::ManifestInvalid)?;
+        validate_assertion_bindings(manifest, assertion_bindings)?;
 
         let statement_digest = manifest.statement_digest();
         let mut outputs = Vec::with_capacity(manifest.payouts.len() + 1);
         let mut execution_fee_script = execution_fee_script;
         let mut execution_fee_seen = false;
+        let mut beneficiary_index = 0usize;
 
         // 2 One output per payout, in manifest order.
         for payout in &manifest.payouts {
             match payout.kind {
                 PayoutKind::BeneficiaryAllocation => {
-                    let script = claim_scriptpubkey(statement_digest, payout.recipient_key).ok_or(
+                    let assertion_binding_digest =
+                        assertion_bindings.get(beneficiary_index).copied();
+                    beneficiary_index += 1;
+                    let script = claim_output_script(
+                        statement_digest,
+                        payout.recipient_key,
+                        assertion_binding_digest,
+                    )
+                    .ok_or(
                         SuccessorFundingError::ClaimScriptDerivationFailed {
                             beneficiary_key: payout.recipient_key,
                         },
                     )?;
                     outputs.push(FundingOutput::Claim {
                         beneficiary_key: payout.recipient_key,
+                        assertion_binding_digest,
                         amount_sats: payout.amount_sats,
                         script_pubkey: ScriptBuf::from_bytes(script),
                     });
@@ -234,12 +272,13 @@ impl SuccessorFunding {
 
         // 5 Build the candidate and run the verifier over it. One implementation of the rule.
         let candidate = candidate_transaction(deposit.outpoint, &outputs);
-        Self::verify(
+        Self::verify_with_assertions(
             &candidate,
             manifest,
             deposit.outpoint,
             deposit.value_sats,
             FeeBounds::new(miner_fee_sats, miner_fee_sats),
+            assertion_bindings,
         )
     }
 
@@ -256,10 +295,34 @@ impl SuccessorFunding {
         deposit_value_sats: u64,
         bounds: FeeBounds,
     ) -> Result<Self, SuccessorFundingError> {
+        Self::verify_with_assertions(
+            transaction,
+            manifest,
+            deposit_outpoint,
+            deposit_value_sats,
+            bounds,
+            &[],
+        )
+    }
+
+    /// Verifies a successor funding transaction whose beneficiary claims are two-leaf claims.
+    ///
+    /// `assertion_bindings` follows the same rule as [`Self::new_with_assertions`]. Passing an
+    /// empty slice checks the v1 single-leaf shape.
+    #[allow(clippy::too_many_arguments)]
+    pub fn verify_with_assertions(
+        transaction: &Transaction,
+        manifest: &TransitionManifest,
+        deposit_outpoint: OutPoint,
+        deposit_value_sats: u64,
+        bounds: FeeBounds,
+        assertion_bindings: &[[u8; 32]],
+    ) -> Result<Self, SuccessorFundingError> {
         // 1 A malformed manifest cannot authorise anything.
         manifest
             .validate()
             .map_err(SuccessorFundingError::ManifestInvalid)?;
+        validate_assertion_bindings(manifest, assertion_bindings)?;
         let statement_digest = manifest.statement_digest();
 
         // 2 Version, locktime and input shape are part of what a signature authorises.
@@ -285,6 +348,7 @@ impl SuccessorFunding {
 
         let mut outputs = Vec::with_capacity(expected_outputs);
         let mut execution_fee_seen = false;
+        let mut beneficiary_index = 0usize;
 
         for (index, payout) in manifest.payouts.iter().enumerate() {
             let txout = &transaction.output[index];
@@ -294,15 +358,25 @@ impl SuccessorFunding {
 
             match payout.kind {
                 PayoutKind::BeneficiaryAllocation => {
-                    let expected = claim_scriptpubkey(statement_digest, payout.recipient_key)
-                        .ok_or(SuccessorFundingError::ClaimScriptDerivationFailed {
+                    let assertion_binding_digest =
+                        assertion_bindings.get(beneficiary_index).copied();
+                    beneficiary_index += 1;
+                    let expected = claim_output_script(
+                        statement_digest,
+                        payout.recipient_key,
+                        assertion_binding_digest,
+                    )
+                    .ok_or(
+                        SuccessorFundingError::ClaimScriptDerivationFailed {
                             beneficiary_key: payout.recipient_key,
-                        })?;
+                        },
+                    )?;
                     if txout.script_pubkey != ScriptBuf::from_bytes(expected) {
                         return Err(SuccessorFundingError::PayoutOutputMismatch { index });
                     }
                     outputs.push(FundingOutput::Claim {
                         beneficiary_key: payout.recipient_key,
+                        assertion_binding_digest,
                         amount_sats: payout.amount_sats,
                         script_pubkey: txout.script_pubkey.clone(),
                     });
@@ -406,6 +480,53 @@ impl SuccessorFunding {
     }
 }
 
+/// Returns the claim script for one beneficiary, with or without an assertion leaf.
+fn claim_output_script(
+    statement_digest: [u8; 32],
+    beneficiary_key: [u8; 32],
+    assertion_binding_digest: Option<[u8; 32]>,
+) -> Option<Vec<u8>> {
+    match assertion_binding_digest {
+        Some(binding) => assertion_claim_scriptpubkey(statement_digest, binding, beneficiary_key),
+        None => claim_scriptpubkey(statement_digest, beneficiary_key),
+    }
+}
+
+/// Counts the beneficiary allocations in a manifest.
+fn beneficiary_payout_count(manifest: &TransitionManifest) -> usize {
+    manifest
+        .payouts
+        .iter()
+        .filter(|payout| payout.kind == PayoutKind::BeneficiaryAllocation)
+        .count()
+}
+
+/// Checks the binding vector shape and rejects a zero binding.
+fn validate_assertion_bindings(
+    manifest: &TransitionManifest,
+    assertion_bindings: &[[u8; 32]],
+) -> Result<(), SuccessorFundingError> {
+    if assertion_bindings.is_empty() {
+        return Ok(());
+    }
+
+    let expected = beneficiary_payout_count(manifest);
+    if assertion_bindings.len() != expected {
+        return Err(SuccessorFundingError::AssertionBindingCountMismatch {
+            expected,
+            found: assertion_bindings.len(),
+        });
+    }
+
+    for (index, binding) in assertion_bindings.iter().enumerate() {
+        if *binding == [0u8; 32] {
+            return Err(SuccessorFundingError::ZeroAssertionBinding { index });
+        }
+    }
+
+    Ok(())
+}
+
 /// Builds the transaction shape both the builder and the verifier agree on.
 fn candidate_transaction(deposit_outpoint: OutPoint, outputs: &[FundingOutput]) -> Transaction {
     Transaction {
@@ -477,6 +598,18 @@ pub enum SuccessorFundingError {
         deposit_sats: u64,
         /// The value the outputs require.
         outputs_sats: u64,
+    },
+    /// The number of assertion bindings does not match the number of beneficiary allocations.
+    AssertionBindingCountMismatch {
+        /// The number of beneficiary allocations.
+        expected: usize,
+        /// The number of bindings supplied.
+        found: usize,
+    },
+    /// An assertion binding is all zeroes.
+    ZeroAssertionBinding {
+        /// The beneficiary-order index of the binding.
+        index: usize,
     },
     /// The miner fee lies outside the range the signer accepts.
     MinerFeeOutOfBounds {

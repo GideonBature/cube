@@ -173,7 +173,10 @@ For the exit-ladder/Connector design, enumerate what transaction linkage proves 
 to `cube-argo`, the claim assertion leaf, the `Assert` transaction, `Take` and `Disprove`, and
 `ClaimRecoveryPackage` schema v2 so a two-leaf claim keeps its recovery leaf. Offline byte tests and
 a regtest run reject a premature take, a wrong signer, a missing signature and a wrong secret, and
-accept the honest paths, including recovery through a v2 package. BIND-01 remains open for a
+accept the honest paths, including recovery through a v2 package. `SuccessorFunding` can now emit
+two-leaf claims with one binding per beneficiary; `tests/successor_v2_regtest.rs` runs that shape
+through a successor, an `Assert`, a `Disprove` and a v2 recovery on regtest. The LiftV2 MuSig2
+successor test still uses v1 claims. BIND-01 remains open for a
 unilateral operator: Argo's MAC interface supplies no public input-label opening, so the assertion
 input is signed by the participant whose value is at stake.
 

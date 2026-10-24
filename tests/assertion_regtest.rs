@@ -34,15 +34,18 @@ mod assertion_regtest {
     const SPEND_FEE: u64 = 500;
     const CHALLENGE_BLOCKS: u32 = 144;
 
-    fn regtest_client() -> Option<Client> {
+    fn regtest_client(wallet: Option<&str>) -> Option<Client> {
         let datadir = std::env::var("CUBE_REGTEST_DATADIR").ok()?;
         if datadir.trim().is_empty() {
             return None;
         }
         let port = std::env::var("CUBE_REGTEST_RPC_PORT").unwrap_or_else(|_| "18443".to_string());
         let cookie = PathBuf::from(&datadir).join("regtest/.cookie");
+        let path = wallet
+            .map(|name| format!("/wallet/{name}"))
+            .unwrap_or_default();
         Client::new(
-            &format!("http://127.0.0.1:{port}"),
+            &format!("http://127.0.0.1:{port}{path}"),
             Auth::CookieFile(cookie),
         )
         .ok()
@@ -92,7 +95,7 @@ mod assertion_regtest {
 
     #[test]
     fn assertion_take_and_disprove_are_enforced_on_regtest() {
-        let Some(rpc) = regtest_client() else {
+        let Some(base) = regtest_client(None) else {
             println!(
                 "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
             );
@@ -100,12 +103,13 @@ mod assertion_regtest {
         };
 
         // 1 A wallet with mature funds.
-        if rpc
+        if base
             .call::<serde_json::Value>("createwallet", &[json!("cube_assertion")])
             .is_err()
         {
-            let _ = rpc.call::<serde_json::Value>("loadwallet", &[json!("cube_assertion")]);
+            let _ = base.call::<serde_json::Value>("loadwallet", &[json!("cube_assertion")]);
         }
+        let rpc = regtest_client(Some("cube_assertion")).expect("the wallet client must construct");
         let mining_address: String = rpc.call("getnewaddress", &[]).expect("getnewaddress");
         let _: Vec<String> = rpc
             .call("generatetoaddress", &[json!(101), json!(mining_address)])
