@@ -30,9 +30,11 @@ mod liftv2_regtest_tests {
     };
     use bitcoincore_rpc::{Auth, Client, RpcApi};
     use cube::constructive::contracts::fixed_split_vault_v1::claim::{
-        parse_claim_script, parse_statement_op_return_script, statement_op_return_script,
+        assertion_claim_scriptpubkey, parse_claim_script, parse_statement_op_return_script,
+        statement_op_return_script,
     };
     use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
+    use cube::constructive::graph::assertion::{disclosure_secret_commitment, AssertionTerms};
     use cube::constructive::graph::claim_recovery::ClaimRecovery;
     use cube::constructive::graph::successor_funding::{DepositAnchor, SuccessorFunding};
     use cube::constructive::taproot::TapRoot;
@@ -910,6 +912,27 @@ mod liftv2_regtest_tests {
         manifest.validate().expect("the manifest must be valid");
         let statement_digest = manifest.statement_digest();
 
+        // 5.a The assertion setup supplies one binding per beneficiary. The successor emits a
+        //     two-leaf claim for each; Bob's package below uses the same Bob binding.
+        let bob_terms = AssertionTerms {
+            statement_digest,
+            claim_id: [0x71; 32],
+            setup_instance_id: [0x77; 16],
+            verifier_key_identity: [0x44; 32],
+            table_digest: [0x45; 32],
+            secret_commitment: disclosure_secret_commitment(&[0x46; 32]),
+            input_digest: [0x47; 32],
+            challenge_blocks: 144,
+            operator_key: [0x31; 32],
+            beneficiary_key: bob_key,
+        };
+        let carol_terms = AssertionTerms {
+            claim_id: [0x72; 32],
+            beneficiary_key: carol_key,
+            ..bob_terms.clone()
+        };
+        let bindings = [bob_terms.binding_digest(), carol_terms.binding_digest()];
+
         // 6 Build the successor funding through the graph rule: it spends the deposit
         //   cooperatively and pays every obligation in manifest order. `new` runs the same verifier
         //   a signer runs, so an unfundable successor cannot reach the signing step.
@@ -917,14 +940,22 @@ mod liftv2_regtest_tests {
             &rpc.call::<String>("getnewaddress", &[])
                 .expect("fee address"),
         );
-        let funding = SuccessorFunding::new(
+        let funding = SuccessorFunding::new_with_assertions(
             &manifest,
             DepositAnchor::new(deposit_outpoint, deposit_prevout.value.to_sat()),
             NETWORK_FEE_RESERVE,
             Some(fee_script),
+            &bindings,
         )
         .expect("the successor must fund every manifest obligation");
         assert_eq!(funding.statement_digest(), statement_digest);
+        assert_eq!(
+            funding.outputs()[0].script_pubkey(),
+            &ScriptBuf::from_bytes(
+                assertion_claim_scriptpubkey(statement_digest, bindings[0], bob_key)
+                    .expect("Bob's v2 claim")
+            )
+        );
         let mut successor = funding.transaction();
 
         // 6.a Sign the key path of the deposit with MuSig2.
@@ -1035,13 +1066,13 @@ mod liftv2_regtest_tests {
             "the on-chain commitment must be the statement digest"
         );
 
-        // 9 Build Bob's recovery package, then forget everything except its bytes.
+        // 9 Build Bob's v2 recovery package, then forget everything except its bytes.
         //
         // From here on the test uses only what the package carries: no statement digest, no
         // template call, no derived script. This is the shape of recovery after the Engine and the
         // original client are gone.
         let bob_claim_prevout = successor.output[0].clone();
-        let bob_package = ClaimRecoveryPackage::new(
+        let bob_package = ClaimRecoveryPackage::new_with_assertion(
             ReleaseProfile::ArgoSplitRegtest,
             [0x71; 32],
             None,
@@ -1049,6 +1080,7 @@ mod liftv2_regtest_tests {
             manifest.template_hash,
             manifest.circuit_id,
             statement_digest,
+            bindings[0],
             amounts.bob_sats,
             Some(Anchor::new(successor.compute_txid().to_byte_array(), 0)),
             432,

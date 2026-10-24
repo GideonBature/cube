@@ -181,7 +181,8 @@ tapscript cannot express without an additional construction.
   beneficiary allocation and emits the two-leaf claim for each; `verify_with_assertions` checks the
   same. `tests/successor_v2_regtest.rs` runs the path on regtest: a wallet-funded deposit, a
   successor with two bindings, an `Assert` that is disproved, and a recovery through the v2
-  package. The LiftV2 MuSig2 successor path itself still creates v1 claims.
+  package. The LiftV2 MuSig2 successor test also creates v2 claims and recovers Bob's claim through
+  a v2 package, so the production deposit path is covered.
 - **Claim v2 recovery.** The assertion leaf changes the claim taproot. `ClaimRecoveryPackage`
   schema v2 now carries the binding and the two-leaf recovery control block, so the recovery path
   survives; v1 packages still describe single-leaf claims. `tests/assertion_regtest.rs` funds a

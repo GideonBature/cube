@@ -175,10 +175,10 @@ to `cube-argo`, the claim assertion leaf, the `Assert` transaction, `Take` and `
 a regtest run reject a premature take, a wrong signer, a missing signature and a wrong secret, and
 accept the honest paths, including recovery through a v2 package. `SuccessorFunding` can now emit
 two-leaf claims with one binding per beneficiary; `tests/successor_v2_regtest.rs` runs that shape
-through a successor, an `Assert`, a `Disprove` and a v2 recovery on regtest. The LiftV2 MuSig2
-successor test still uses v1 claims. BIND-01 remains open for a
-unilateral operator: Argo's MAC interface supplies no public input-label opening, so the assertion
-input is signed by the participant whose value is at stake.
+through a successor, an `Assert`, a `Disprove` and a v2 recovery on regtest. `tests/liftv2_regtest.rs`
+also creates v2 claims through the real MuSig2 deposit path and recovers Bob's claim through a v2
+package. BIND-01 remains open for a unilateral operator: Argo's MAC interface supplies no public
+input-label opening, so the assertion input is signed by the participant whose value is at stake.
 
 ## 6. Work package P2: reference contract model and canonical schema
 
