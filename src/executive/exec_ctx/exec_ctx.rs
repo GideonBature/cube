@@ -572,218 +572,229 @@ impl ExecCtx {
         let mut remaining_tx_outputs_for_entries_iter =
             remaining_tx_outputs_for_entries.into_iter();
 
-        // 27 Decode entries from the payload one by one and execute them.
-        while ape_bitstream.len() > 0 {
-            // 27.1 Decode Entry from the APE bitstream.
-            let entry = Entry::decode_ape(
-                self.engine_key,
-                new_batch_height,
-                &mut ape_bitstream,
-                &mut bitcoin_tx_inputs_iter,
-                &mut remaining_tx_outputs_for_entries_iter,
-                collect_entry_ape_bits,
-                encode_account_rank_as_longval,
-                encode_contract_rank_as_longval,
-                base_ops_price,
-                &self.utxo_set,
-                &self.registry,
-            )
-            .await
-            .map_err(BatchExecutionError::DecodeEntryError)?;
-            let (entry, collected_bits) = entry;
-            let collected_bits_text = collected_bits
-                .as_ref()
-                .map(|bits| {
-                    bits.iter()
-                        .map(|bit| if bit { '1' } else { '0' })
-                        .collect::<String>()
-                })
-                .unwrap_or_default();
+        // 26.5 One snapshot for the whole batch. Each manager's backup slot holds a single clone of
+        //      its delta, so the snapshot has to be taken once per batch: a per-entry snapshot
+        //      would overwrite this one and a rejected batch would keep the deltas of its earlier
+        //      entries. Every failure below rolls the whole batch back.
+        self.pre_execution().await;
 
-            // 27.2 Execute the decoded `Entry`.
-            match entry {
-                // 27.2.a The `Entry` is a `Liftup`.
-                Entry::Liftup(liftup) => {
-                    // 27.2.a.1 Execute the `Liftup` `Entry`.
-                    match self.execute_liftup_internal(&liftup, batch_timestamp).await {
-                        // 27.2.a.1.a Success.
-                        Ok(fees) => {
-                            // 27.2.a.1.a.1 Add the liftup entry to the executed entries.
-                            executed_entries.push(Entry::new_liftup(liftup.clone()));
-                            executed_entry_fees.push(fees);
-                            if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
-                                all_collected_bits.push(collected_bits_text.clone());
+        let batch_result: Result<BatchRecord, BatchExecutionError> = async {
+            // 27 Decode entries from the payload one by one and execute them.
+            while ape_bitstream.len() > 0 {
+                // 27.1 Decode Entry from the APE bitstream.
+                let entry = Entry::decode_ape(
+                    self.engine_key,
+                    new_batch_height,
+                    &mut ape_bitstream,
+                    &mut bitcoin_tx_inputs_iter,
+                    &mut remaining_tx_outputs_for_entries_iter,
+                    collect_entry_ape_bits,
+                    encode_account_rank_as_longval,
+                    encode_contract_rank_as_longval,
+                    base_ops_price,
+                    &self.utxo_set,
+                    &self.registry,
+                )
+                .await
+                .map_err(BatchExecutionError::DecodeEntryError)?;
+                let (entry, collected_bits) = entry;
+                let collected_bits_text = collected_bits
+                    .as_ref()
+                    .map(|bits| {
+                        bits.iter()
+                            .map(|bit| if bit { '1' } else { '0' })
+                            .collect::<String>()
+                    })
+                    .unwrap_or_default();
+
+                // 27.2 Execute the decoded `Entry`.
+                match entry {
+                    // 27.2.a The `Entry` is a `Liftup`.
+                    Entry::Liftup(liftup) => {
+                        // 27.2.a.1 Execute the `Liftup` `Entry`.
+                        match self.execute_liftup_internal(&liftup, batch_timestamp).await {
+                            // 27.2.a.1.a Success.
+                            Ok(fees) => {
+                                // 27.2.a.1.a.1 Add the liftup entry to the executed entries.
+                                executed_entries.push(Entry::new_liftup(liftup.clone()));
+                                executed_entry_fees.push(fees);
+                                if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
+                                    all_collected_bits.push(collected_bits_text.clone());
+                                }
+
+                                // 27.2.a.1.a.2 Add the sighash of the `Liftup`.
+                                {
+                                    let sighash = liftup
+                                        .sighash()
+                                        .map_err(BatchExecutionError::LiftupSighashError)?;
+                                    executed_entry_sighashes.push(sighash);
+                                }
+
+                                // 27.2.a.1.a.3 Add the BLS key of the `RootAccount` of the `Liftup`.
+                                {
+                                    let account_bls_key = liftup.root_account.bls_key();
+                                    executed_entry_account_bls_keys.push(account_bls_key);
+                                }
                             }
+                            // 27.2.a.1.b Error.
+                            Err(error) => return Err(BatchExecutionError::LiftupExecutionError(error)),
+                        }
+                    }
+                    // 27.2.b The `Entry` is a `Move`.
+                    Entry::Move(move_entry) => {
+                        // 27.2.b.1 Execute the `Move` `Entry`.
+                        match self
+                            .execute_move_internal(&move_entry, batch_timestamp)
+                            .await
+                        {
+                            // 27.2.b.1.a Success.
+                            Ok(fees) => {
+                                // 27.2.b.1.a.1 Add the move entry to the executed entries.
+                                executed_entries.push(Entry::new_move(move_entry.clone()));
+                                executed_entry_fees.push(fees);
+                                if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
+                                    all_collected_bits.push(collected_bits_text.clone());
+                                }
 
-                            // 27.2.a.1.a.2 Add the sighash of the `Liftup`.
-                            {
-                                let sighash = liftup
+                                // 27.2.b.1.a.2 Add the sighash of the `Move`.
+                                {
+                                    let sighash = move_entry
+                                        .sighash()
+                                        .map_err(BatchExecutionError::MoveSighashError)?;
+                                    executed_entry_sighashes.push(sighash);
+                                }
+
+                                // 27.2.b.1.a.3 Add the BLS key of the sender `RootAccount` of the `Move`.
+                                {
+                                    let account_bls_key = move_entry.from.bls_key();
+                                    executed_entry_account_bls_keys.push(account_bls_key);
+                                }
+                            }
+                            // 27.2.b.1.b Error.
+                            Err(error) => return Err(BatchExecutionError::MoveExecutionError(error)),
+                        }
+                    }
+                    Entry::Swapout(swapout) => {
+                        match self
+                            .execute_swapout_internal(&swapout, batch_timestamp)
+                            .await
+                        {
+                            Ok(fees) => {
+                                executed_entries.push(Entry::new_swapout(swapout.clone()));
+                                executed_entry_fees.push(fees);
+                                if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
+                                    all_collected_bits.push(collected_bits_text.clone());
+                                }
+                                let sighash = swapout
                                     .sighash()
-                                    .map_err(BatchExecutionError::LiftupSighashError)?;
+                                    .map_err(|_| BatchExecutionError::SwapoutSighashError)?;
                                 executed_entry_sighashes.push(sighash);
+                                executed_entry_account_bls_keys.push(swapout.root_account.bls_key());
                             }
-
-                            // 27.2.a.1.a.3 Add the BLS key of the `RootAccount` of the `Liftup`.
-                            {
-                                let account_bls_key = liftup.root_account.bls_key();
-                                executed_entry_account_bls_keys.push(account_bls_key);
+                            Err(error) => {
+                                return Err(BatchExecutionError::SwapoutExecutionError(error))
                             }
                         }
-                        // 27.2.a.1.b Error.
-                        Err(error) => return Err(BatchExecutionError::LiftupExecutionError(error)),
                     }
-                }
-                // 27.2.b The `Entry` is a `Move`.
-                Entry::Move(move_entry) => {
-                    // 27.2.b.1 Execute the `Move` `Entry`.
-                    match self
-                        .execute_move_internal(&move_entry, batch_timestamp)
-                        .await
-                    {
-                        // 27.2.b.1.a Success.
-                        Ok(fees) => {
-                            // 27.2.b.1.a.1 Add the move entry to the executed entries.
-                            executed_entries.push(Entry::new_move(move_entry.clone()));
-                            executed_entry_fees.push(fees);
-                            if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
-                                all_collected_bits.push(collected_bits_text.clone());
-                            }
-
-                            // 27.2.b.1.a.2 Add the sighash of the `Move`.
-                            {
-                                let sighash = move_entry
+                    Entry::Deploy(deploy) => {
+                        match self.execute_deploy_internal(&deploy, batch_timestamp).await {
+                            Ok(fees) => {
+                                executed_entries.push(Entry::new_deploy(deploy.clone()));
+                                executed_entry_fees.push(fees);
+                                if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
+                                    all_collected_bits.push(collected_bits_text.clone());
+                                }
+                                let sighash = deploy
                                     .sighash()
-                                    .map_err(BatchExecutionError::MoveSighashError)?;
+                                    .map_err(BatchExecutionError::DeploySighashError)?;
                                 executed_entry_sighashes.push(sighash);
+                                executed_entry_account_bls_keys.push(deploy.root_account.bls_key());
                             }
-
-                            // 27.2.b.1.a.3 Add the BLS key of the sender `RootAccount` of the `Move`.
-                            {
-                                let account_bls_key = move_entry.from.bls_key();
-                                executed_entry_account_bls_keys.push(account_bls_key);
-                            }
-                        }
-                        // 27.2.b.1.b Error.
-                        Err(error) => return Err(BatchExecutionError::MoveExecutionError(error)),
-                    }
-                }
-                Entry::Swapout(swapout) => {
-                    match self
-                        .execute_swapout_internal(&swapout, batch_timestamp)
-                        .await
-                    {
-                        Ok(fees) => {
-                            executed_entries.push(Entry::new_swapout(swapout.clone()));
-                            executed_entry_fees.push(fees);
-                            if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
-                                all_collected_bits.push(collected_bits_text.clone());
-                            }
-                            let sighash = swapout
-                                .sighash()
-                                .map_err(|_| BatchExecutionError::SwapoutSighashError)?;
-                            executed_entry_sighashes.push(sighash);
-                            executed_entry_account_bls_keys.push(swapout.root_account.bls_key());
-                        }
-                        Err(error) => {
-                            return Err(BatchExecutionError::SwapoutExecutionError(error))
+                            Err(error) => return Err(BatchExecutionError::DeployExecutionError(error)),
                         }
                     }
-                }
-                Entry::Deploy(deploy) => {
-                    match self.execute_deploy_internal(&deploy, batch_timestamp).await {
-                        Ok(fees) => {
-                            executed_entries.push(Entry::new_deploy(deploy.clone()));
-                            executed_entry_fees.push(fees);
-                            if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
-                                all_collected_bits.push(collected_bits_text.clone());
+                    Entry::Config(config) => {
+                        match self.execute_config_internal(&config, batch_timestamp).await {
+                            Ok(fees) => {
+                                executed_entries.push(Entry::new_config(config.clone()));
+                                executed_entry_fees.push(fees);
+                                if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
+                                    all_collected_bits.push(collected_bits_text.clone());
+                                }
+                                let sighash = config
+                                    .sighash()
+                                    .map_err(BatchExecutionError::ConfigSighashError)?;
+                                executed_entry_sighashes.push(sighash);
+                                executed_entry_account_bls_keys.push(config.root_account.bls_key());
                             }
-                            let sighash = deploy
-                                .sighash()
-                                .map_err(BatchExecutionError::DeploySighashError)?;
-                            executed_entry_sighashes.push(sighash);
-                            executed_entry_account_bls_keys.push(deploy.root_account.bls_key());
+                            Err(error) => return Err(BatchExecutionError::ConfigExecutionError(error)),
                         }
-                        Err(error) => return Err(BatchExecutionError::DeployExecutionError(error)),
                     }
-                }
-                Entry::Config(config) => {
-                    match self.execute_config_internal(&config, batch_timestamp).await {
-                        Ok(fees) => {
-                            executed_entries.push(Entry::new_config(config.clone()));
-                            executed_entry_fees.push(fees);
-                            if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
-                                all_collected_bits.push(collected_bits_text.clone());
+                    // 27.2.f The `Entry` is a `Call`.
+                    Entry::Call(call) => {
+                        // 27.2.f.1 Execute the `Call` `Entry`.
+                        match self.execute_call_internal(&call, batch_timestamp).await {
+                            // 27.2.f.2.a Success.
+                            Ok(fees) => {
+                                executed_entries.push(Entry::new_call(call.clone()));
+                                executed_entry_fees.push(fees);
+                                if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
+                                    all_collected_bits.push(collected_bits_text.clone());
+                                }
+                                let sighash = call
+                                    .sighash()
+                                    .map_err(BatchExecutionError::CallSighashError)?;
+                                executed_entry_sighashes.push(sighash);
+                                executed_entry_account_bls_keys.push(call.account.bls_key());
                             }
-                            let sighash = config
-                                .sighash()
-                                .map_err(BatchExecutionError::ConfigSighashError)?;
-                            executed_entry_sighashes.push(sighash);
-                            executed_entry_account_bls_keys.push(config.root_account.bls_key());
-                        }
-                        Err(error) => return Err(BatchExecutionError::ConfigExecutionError(error)),
-                    }
-                }
-                // 27.2.f The `Entry` is a `Call`.
-                Entry::Call(call) => {
-                    // 27.2.f.1 Back up the execution context so a failed call can be rolled back
-                    // on its own. The other arms in this dispatcher do not do this yet; until
-                    // they do, a rejected batch leaves their deltas partially applied.
-                    self.pre_execution().await;
-
-                    // 27.2.f.2 Execute the `Call` `Entry`.
-                    // The borrow ends with this statement, so `rollback_last` can borrow `self`
-                    // mutably in the error arm below.
-                    let call_result = self.execute_call_internal(&call, batch_timestamp).await;
-
-                    match call_result {
-                        // 27.2.f.3.a Success.
-                        Ok(fees) => {
-                            executed_entries.push(Entry::new_call(call.clone()));
-                            executed_entry_fees.push(fees);
-                            if let Some(all_collected_bits) = collected_entry_ape_bits.as_mut() {
-                                all_collected_bits.push(collected_bits_text.clone());
-                            }
-                            let sighash = call
-                                .sighash()
-                                .map_err(BatchExecutionError::CallSighashError)?;
-                            executed_entry_sighashes.push(sighash);
-                            executed_entry_account_bls_keys.push(call.account.bls_key());
-                        }
-                        // 27.2.f.3.b Error.
-                        Err(error) => {
-                            self.rollback_last().await;
-                            return Err(BatchExecutionError::CallExecutionError(error));
+                            // 27.2.f.2.b Error.
+                            Err(error) => return Err(BatchExecutionError::CallExecutionError(error)),
                         }
                     }
                 }
             }
-        }
 
-        // 29 Verify the aggregate BLS signature.
-        if !bls_verify_aggregate(
-            executed_entry_account_bls_keys,
-            executed_entry_sighashes,
-            aggregate_bls_signature,
-        ) {
-            return Err(BatchExecutionError::AggregateBLSSignatureVerificationError);
-        }
+            // 29 Verify the aggregate BLS signature.
+            if !bls_verify_aggregate(
+                executed_entry_account_bls_keys,
+                executed_entry_sighashes,
+                aggregate_bls_signature,
+            ) {
+                return Err(BatchExecutionError::AggregateBLSSignatureVerificationError);
+            }
 
-        // 30 Construct the batch record.
-        let batch_record = BatchRecord::new(
-            batch_container.clone(),
-            batch_timestamp,
-            payload_version,
-            aggregate_bls_signature,
-            executed_entries,
-            executed_entry_fees,
-            collected_entry_ape_bits,
-            expired_projector_outpoints.clone(),
-            new_payload.clone(),
-            new_projector.clone(),
-        )
-        .ok_or(BatchExecutionError::ExecutedEntryIdError)?;
+            // 30 Construct the batch record.
+            let batch_record = BatchRecord::new(
+                batch_container.clone(),
+                batch_timestamp,
+                payload_version,
+                aggregate_bls_signature,
+                executed_entries,
+                executed_entry_fees,
+                collected_entry_ape_bits,
+                expired_projector_outpoints.clone(),
+                new_payload.clone(),
+                new_projector.clone(),
+            )
+            .ok_or(BatchExecutionError::ExecutedEntryIdError)?;
+
+            Ok(batch_record)
+        }
+        .await;
+
+        let batch_record = match batch_result {
+            Ok(batch_record) => batch_record,
+            Err(error) => {
+                self.rollback_last().await;
+                return Err(error);
+            }
+        };
 
         // 31 Apply the batch record to local managers, sync tips, utxo, and archival store.
+        //
+        // A failure here is not covered by the rollback above: it restores the managers' deltas,
+        // while a partially committed store is a different problem. The batch is already fully
+        // executed and verified at this point, so the remaining risk is a storage fault.
         self.apply_changes(&batch_record)
             .await
             .map_err(BatchExecutionError::ApplyChangesError)?;

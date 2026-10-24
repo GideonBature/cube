@@ -30,6 +30,15 @@ impl ExecCtx {
             .program
             .validate_methods()
             .map_err(DeployExecutionError::ProgramValidateMethodsError)?;
+
+        // 1 Only reviewed templates may become contracts. A deploy is the single point at which a
+        //   program enters the registry, so this is where the allowlist has to hold; the call path
+        //   stays generic and does not re-check, which is why the gate is described as a
+        //   deployment policy rather than an execution one.
+        let template_hash = deploy.program.contract_id();
+        if !crate::constructive::contracts::is_allowlisted_template(template_hash) {
+            return Err(DeployExecutionError::TemplateNotAllowlistedError { template_hash });
+        }
         let program_bytes_len = deploy
             .program
             .compile()

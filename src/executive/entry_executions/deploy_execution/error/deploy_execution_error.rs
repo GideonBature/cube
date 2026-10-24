@@ -20,6 +20,11 @@ pub enum DeployExecutionError {
         RegisteredAndConfiguredRootAccountSyncWithRegistryError,
     ),
     ProgramValidateMethodsError(MethodValidationError),
+    /// The compiled program is not a reviewed template, so it may not become a contract.
+    TemplateNotAllowlistedError {
+        /// The compiled identity of the program the deploy tried to register.
+        template_hash: [u8; 32],
+    },
     ProgramCompileError,
     DeployProgramByteFeeOverflow,
     DeployTotalPreSubsidyOverflow,
