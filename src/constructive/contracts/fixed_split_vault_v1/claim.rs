@@ -1,18 +1,22 @@
 //! The beneficiary claim output.
 //!
 //! A claim output is a taproot output with **no key path**: its internal key is the nothing-up-my-
-//! sleeve point, so the only way to spend it is the single tapscript leaf. That leaf carries two
-//! constants:
+//! sleeve point, so the only way to spend it is a tapscript leaf. The frozen v1 claim has one leaf,
+//! the recovery branch:
 //!
 //! ```text
 //! <32-byte statement digest> OP_DROP <32-byte beneficiary key> OP_CHECKSIG
 //! ```
 //!
-//! The consequence a reviewer should check: the statement digest is committed structurally, not by
-//! convention. A claim output funded with digest `D` can only be spent by a witness that reveals a
-//! script containing `D`, and only the named beneficiary can produce that witness. When the claim
-//! is spent, the script travels in the witness, so any third party can see which statement the
-//! claim was bound to.
+//! A v2 claim adds an assertion branch at index 1:
+//!
+//! ```text
+//! <32-byte statement digest> OP_DROP <32-byte assertion binding> OP_DROP <32-byte beneficiary key> OP_CHECKSIG
+//! ```
+//!
+//! Both branches carry constants only; they put the statement and the assertion binding inside the
+//! output key. The recovery branch is what a [`crate::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage`]
+//! spends; the assertion branch is what the `Assert` role spends after the beneficiary signs.
 //!
 //! What this does **not** provide:
 //!
@@ -28,6 +32,15 @@ use crate::transmutative::hash::{Hash, HashTag};
 
 /// The length of a claim script, in bytes.
 pub const CLAIM_SCRIPT_LEN: usize = 68;
+
+/// The length of an assertion claim script, in bytes.
+pub const ASSERTION_CLAIM_SCRIPT_LEN: usize = 102;
+
+/// The leaf index of the recovery branch in a two-leaf claim taproot.
+pub const CLAIM_RECOVERY_LEAF_INDEX: usize = 0;
+
+/// The leaf index of the assertion branch in a two-leaf claim taproot.
+pub const CLAIM_ASSERTION_LEAF_INDEX: usize = 1;
 
 /// The opcode that pushes the statement digest.
 const OP_PUSH_32: u8 = 0x20;
@@ -78,6 +91,100 @@ pub fn claim_control_block(
     claim_taproot(statement_digest, beneficiary_key)
         .control_block(0)
         .map(|control_block| control_block.to_vec())
+}
+
+/// Returns the assertion leaf of a two-leaf claim:
+///
+/// ```text
+/// 0x20 <statement:32> 0x75 0x20 <assertion binding:32> 0x75 0x20 <beneficiary:32> 0xac
+/// ```
+///
+/// The binding digest is the `CubeV1/Assertion/v0` digest from
+/// [`crate::constructive::graph::assertion::AssertionTerms`]. Both constants are dropped; they are
+/// there to put the values inside the taproot commitment, not to be evaluated.
+pub fn assertion_claim_script(
+    statement_digest: [u8; 32],
+    assertion_binding_digest: [u8; 32],
+    beneficiary_key: [u8; 32],
+) -> Vec<u8> {
+    let mut script = Vec::<u8>::with_capacity(ASSERTION_CLAIM_SCRIPT_LEN);
+    script.push(OP_PUSH_32);
+    script.extend(statement_digest);
+    script.push(OP_DROP);
+    script.push(OP_PUSH_32);
+    script.extend(assertion_binding_digest);
+    script.push(OP_DROP);
+    script.push(OP_PUSH_32);
+    script.extend(beneficiary_key);
+    script.push(OP_CHECKSIG);
+    script
+}
+
+/// Returns the two-leaf claim taproot: recovery at index 0, assertion at index 1, no key path.
+pub fn assertion_claim_taproot(
+    statement_digest: [u8; 32],
+    assertion_binding_digest: [u8; 32],
+    beneficiary_key: [u8; 32],
+) -> TapRoot {
+    TapRoot::script_path_only_multi(vec![
+        TapLeaf::new(claim_script(statement_digest, beneficiary_key)),
+        TapLeaf::new(assertion_claim_script(
+            statement_digest,
+            assertion_binding_digest,
+            beneficiary_key,
+        )),
+    ])
+}
+
+/// Returns the two-leaf claim scriptpubkey, or `None` if the tweak degenerates.
+pub fn assertion_claim_scriptpubkey(
+    statement_digest: [u8; 32],
+    assertion_binding_digest: [u8; 32],
+    beneficiary_key: [u8; 32],
+) -> Option<Vec<u8>> {
+    assertion_claim_taproot(statement_digest, assertion_binding_digest, beneficiary_key).spk()
+}
+
+/// Returns the control block for one leaf of a two-leaf claim taproot.
+pub fn assertion_claim_control_block(
+    statement_digest: [u8; 32],
+    assertion_binding_digest: [u8; 32],
+    beneficiary_key: [u8; 32],
+    leaf_index: usize,
+) -> Option<Vec<u8>> {
+    assertion_claim_taproot(statement_digest, assertion_binding_digest, beneficiary_key)
+        .control_block(leaf_index)
+        .map(|control_block| control_block.to_vec())
+}
+
+/// Parses an assertion claim script back into its statement, binding and beneficiary key.
+///
+/// Returns `None` for any script that is not exactly the frozen layout, so a spend that reveals a
+/// different script cannot be mistaken for one that commits to the expected values.
+pub fn parse_assertion_claim_script(script: &[u8]) -> Option<([u8; 32], [u8; 32], [u8; 32])> {
+    if script.len() != ASSERTION_CLAIM_SCRIPT_LEN {
+        return None;
+    }
+    if script[0] != OP_PUSH_32 || script[33] != OP_DROP || script[34] != OP_PUSH_32 {
+        return None;
+    }
+    if script[67] != OP_DROP || script[68] != OP_PUSH_32 {
+        return None;
+    }
+    if script[ASSERTION_CLAIM_SCRIPT_LEN - 1] != OP_CHECKSIG {
+        return None;
+    }
+
+    let mut statement_digest = [0u8; 32];
+    statement_digest.copy_from_slice(&script[1..33]);
+
+    let mut assertion_binding_digest = [0u8; 32];
+    assertion_binding_digest.copy_from_slice(&script[35..67]);
+
+    let mut beneficiary_key = [0u8; 32];
+    beneficiary_key.copy_from_slice(&script[69..101]);
+
+    Some((statement_digest, assertion_binding_digest, beneficiary_key))
 }
 
 /// Parses a claim script back into its digest and beneficiary key.

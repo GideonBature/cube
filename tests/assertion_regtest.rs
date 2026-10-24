@@ -11,10 +11,14 @@ mod assertion_regtest {
     use bitcoin::taproot::TapLeafHash;
     use bitcoin::{Address, Amount, Network, OutPoint, TxOut, Txid, Witness};
     use bitcoincore_rpc::{Auth, Client, RpcApi};
+    use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
     use cube::constructive::graph::assertion::{
         disclosure_secret_commitment, Assertion, AssertionAnchor, AssertionClaim, AssertionTerms,
         ContestedOutput, DisproveSpend, TakeSpend,
     };
+    use cube::constructive::graph::claim_recovery::ClaimRecovery;
+    use cube::model::fixed_split_vault_v1::manifest::Anchor;
+    use cube::model::fixed_split_vault_v1::ReleaseProfile;
     use serde_json::json;
     use std::path::PathBuf;
     use std::str::FromStr;
@@ -348,6 +352,89 @@ mod assertion_regtest {
         let mined: serde_json::Value = rpc
             .call("gettransaction", &[json!(take_txid), json!(true)])
             .expect("take included");
+        assert_eq!(mined["confirmations"].as_u64().unwrap_or(0), 1);
+
+        // 7 A two-leaf claim keeps its recovery leaf. Fund one more claim and spend it through a
+        //   v2 package, without touching the assertion leaf.
+        let recovery_terms = AssertionTerms {
+            statement_digest: STATEMENT,
+            claim_id: [0x50; 32],
+            setup_instance_id: INSTANCE,
+            verifier_key_identity: [0x51; 32],
+            table_digest: [0x61; 32],
+            secret_commitment: disclosure_secret_commitment(&SECRET),
+            input_digest: [0x71; 32],
+            challenge_blocks: CHALLENGE_BLOCKS,
+            operator_key: secp_operator,
+            beneficiary_key: secp_beneficiary,
+        };
+        let recovery_claim =
+            AssertionClaim::new(STATEMENT, recovery_terms.binding_digest(), secp_beneficiary)
+                .expect("recovery claim");
+        let recovery_address = Address::from_script(
+            &recovery_claim.scriptpubkey().expect("recovery claim spk"),
+            Network::Regtest,
+        )
+        .expect("recovery claim address");
+        let recovery_funding: String = rpc
+            .call(
+                "sendtoaddress",
+                &[json!(recovery_address.to_string()), json!(0.001)],
+            )
+            .expect("fund the recovery claim");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm the recovery claim");
+        let (recovery_outpoint, recovery_prevout) =
+            wallet_output(&rpc, &recovery_funding, CLAIM_VALUE);
+
+        let height: u64 = rpc.call("getblockcount", &[]).expect("height");
+        let package = ClaimRecoveryPackage::new_with_assertion(
+            ReleaseProfile::ArgoSplitRegtest,
+            [0x60; 32],
+            None,
+            secp_beneficiary,
+            [0x62; 32],
+            [0x63; 32],
+            STATEMENT,
+            recovery_terms.binding_digest(),
+            CLAIM_VALUE,
+            Some(Anchor {
+                txid: recovery_outpoint.txid.to_byte_array(),
+                vout: recovery_outpoint.vout,
+            }),
+            height + 144,
+            2,
+            [0x64; 32],
+            [0x65; 32],
+        )
+        .expect("the v2 recovery package must construct");
+        let recovery = ClaimRecovery::new(
+            &package,
+            &recovery_prevout,
+            destination_script.clone(),
+            SPEND_FEE,
+        )
+        .expect("v2 recovery");
+        let sighash = recovery
+            .signing_hash(&recovery_prevout)
+            .expect("recovery sighash");
+        let mut recovery_tx = recovery.transaction();
+        recovery_tx.input[0].witness = recovery.witness(sign_digest(sighash, BENEFICIARY_SECRET));
+        let recovery_txid: Txid = rpc
+            .call(
+                "sendrawtransaction",
+                &[json!(bitcoin::consensus::encode::serialize_hex(
+                    &recovery_tx
+                ))],
+            )
+            .expect("the v2 recovery must be accepted");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm the v2 recovery");
+        let mined: serde_json::Value = rpc
+            .call("gettransaction", &[json!(recovery_txid), json!(true)])
+            .expect("recovery included");
         assert_eq!(mined["confirmations"].as_u64().unwrap_or(0), 1);
     }
 

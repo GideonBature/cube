@@ -177,9 +177,10 @@ tapscript cannot express without an additional construction.
   profile: protection comes from the participant's own setup and signature.
 - **Graph economics.** Which output is contested (a claim, a fee output or an operator bond) is a
   graph decision. The mechanism does not assume an answer, and `GRAPH-01` stays open.
-- **Claim v2.** The assertion leaf changes the claim taproot. A claim that carries it needs a
-  recovery-package version that carries the second leaf and control block. The v1 package is
-  unchanged.
+- **Claim v2 recovery.** The assertion leaf changes the claim taproot. `ClaimRecoveryPackage`
+  schema v2 now carries the binding and the two-leaf recovery control block, so the recovery path
+  survives; v1 packages still describe single-leaf claims. `tests/assertion_regtest.rs` funds a
+  two-leaf claim and recovers it through a v2 package.
 - **Data availability.** The 277-byte terms, 36,928 bytes of authenticated input and an
   18,067,073-byte table have to be retrievable before the challenge deadline. `B` is a commitment;
   a challenger cannot recover the terms from it. A digest on chain is not publication; `DA-01`

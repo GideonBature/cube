@@ -5,6 +5,11 @@
 //! is bound to, the exact script and control block that spend it, and the economic terms needed to
 //! judge whether spending it is still correct.
 //!
+//! Two claim shapes are supported. A v1 package describes the single-leaf claim; a v2 package
+//! carries the assertion binding digest as well, so it describes the two-leaf claim that adds an
+//! `Assert` branch while keeping the recovery branch. The recovery spend is the same in both cases:
+//! the carried recovery script and its control block.
+//!
 //! # Why the script and control block are inside the package
 //!
 //! Deriving them from the statement and beneficiary key is possible, but it makes recovery depend on
@@ -17,14 +22,15 @@
 //!
 //! - **Data availability.** A package is a local artifact. Nothing here publishes it, and a hash on
 //!   chain is not publication (specification.md section 10).
-//! - **Proof material.** `setup_instance_id`, `challenge_config_digest` and the statement digest are
-//!   carried so a later assertion can be matched against them. No proof, label or table bytes are
-//!   included because no relation exists yet.
+//! - **Proof material.** `setup_instance_id`, `challenge_config_digest`, the statement digest and a
+//!   v2 binding are carried so a later assertion can be matched against them. Proof, table and
+//!   authenticated-input bytes are not included; `docs/bind_01.md` covers their availability.
 //! - **Encryption.** The package contains no secret keys, but it is not encrypted or authenticated.
 //!   Integrity is checked structurally; authenticity needs a signature the protocol has not defined.
 
 use crate::constructive::contracts::fixed_split_vault_v1::claim::{
-    claim_control_block, claim_script, claim_scriptpubkey, parse_claim_script,
+    assertion_claim_control_block, assertion_claim_scriptpubkey, claim_control_block, claim_script,
+    claim_scriptpubkey, parse_claim_script, CLAIM_RECOVERY_LEAF_INDEX,
 };
 use crate::model::fixed_split_vault_v1::manifest::Anchor;
 use crate::model::fixed_split_vault_v1::ReleaseProfile;
@@ -32,8 +38,14 @@ use crate::transmutative::hash::{Hash, HashTag};
 use bitcoin::taproot::ControlBlock;
 use bitcoin::ScriptBuf;
 
-/// The schema version byte of the frozen package encoding.
+/// The schema version byte of the single-leaf package encoding.
 pub const PACKAGE_SCHEMA_VERSION: u8 = 1;
+
+/// The schema version byte of the two-leaf claim package encoding.
+///
+/// The only encoding difference is the assertion binding digest: v2 carries it directly after the
+/// statement digest, v1 does not. Both versions remain decodable so an old package keeps working.
+pub const PACKAGE_SCHEMA_VERSION_V2: u8 = 2;
 
 /// The BIP-340 style tagged-hash tag of the package digest.
 pub const PACKAGE_DIGEST_TAG: &str = "CubeV1/Package/v0";
@@ -85,6 +97,8 @@ pub struct ClaimRecoveryPackage {
     pub circuit_id: [u8; 32],
     /// The statement commitment the claim binds.
     pub statement_digest: [u8; 32],
+    /// The assertion binding digest for a two-leaf claim, or `None` for a single-leaf v1 claim.
+    pub assertion_binding_digest: Option<[u8; 32]>,
 
     /// The value the claim pays, in satoshis.
     pub entitlement_sats: u64,
@@ -102,17 +116,16 @@ pub struct ClaimRecoveryPackage {
     /// The challenge and timing configuration digest.
     pub challenge_config_digest: [u8; 32],
 
-    /// The claim tapscript, as carried rather than re-derived.
+    /// The recovery claim tapscript, as carried rather than re-derived.
     pub claim_script: Vec<u8>,
     /// The control block that commits `claim_script` to the claim output.
     pub control_block: Vec<u8>,
 }
 
 impl ClaimRecoveryPackage {
-    /// Constructs a package for a claim, deriving the script and control block from the statement.
+    /// Constructs a single-leaf (v1) package, deriving the script and control block.
     ///
-    /// This is the normal way to build one. `from_parts` exists for importing a package whose
-    /// bytes came from elsewhere.
+    /// `decode` exists for importing a package whose bytes came from elsewhere.
     pub fn new(
         profile: ReleaseProfile,
         claim_id: [u8; 32],
@@ -128,11 +141,7 @@ impl ClaimRecoveryPackage {
         setup_instance_id: [u8; 32],
         challenge_config_digest: [u8; 32],
     ) -> Option<Self> {
-        let claim_script = claim_script(statement_digest, beneficiary_key);
-        let control_block = claim_control_block(statement_digest, beneficiary_key)?;
-
-        Some(Self {
-            schema_version: PACKAGE_SCHEMA_VERSION,
+        Self::build(
             profile,
             claim_id,
             predecessor_claim_id,
@@ -140,6 +149,99 @@ impl ClaimRecoveryPackage {
             template_hash,
             circuit_id,
             statement_digest,
+            entitlement_sats,
+            claim_outpoint,
+            expiry_height,
+            fee_rate_sat_per_vb,
+            setup_instance_id,
+            challenge_config_digest,
+            None,
+        )
+    }
+
+    /// Constructs a two-leaf (v2) package for a claim that also carries an assertion leaf.
+    ///
+    /// The recovery leaf and the beneficiary key are unchanged; only the taproot has a second leaf
+    /// and therefore a different output key and control block.
+    pub fn new_with_assertion(
+        profile: ReleaseProfile,
+        claim_id: [u8; 32],
+        predecessor_claim_id: Option<[u8; 32]>,
+        beneficiary_key: [u8; 32],
+        template_hash: [u8; 32],
+        circuit_id: [u8; 32],
+        statement_digest: [u8; 32],
+        assertion_binding_digest: [u8; 32],
+        entitlement_sats: u64,
+        claim_outpoint: Option<Anchor>,
+        expiry_height: u64,
+        fee_rate_sat_per_vb: u64,
+        setup_instance_id: [u8; 32],
+        challenge_config_digest: [u8; 32],
+    ) -> Option<Self> {
+        Self::build(
+            profile,
+            claim_id,
+            predecessor_claim_id,
+            beneficiary_key,
+            template_hash,
+            circuit_id,
+            statement_digest,
+            entitlement_sats,
+            claim_outpoint,
+            expiry_height,
+            fee_rate_sat_per_vb,
+            setup_instance_id,
+            challenge_config_digest,
+            Some(assertion_binding_digest),
+        )
+    }
+
+    /// Builds the package and derives the control block for the claim shape the binding selects.
+    #[allow(clippy::too_many_arguments)]
+    fn build(
+        profile: ReleaseProfile,
+        claim_id: [u8; 32],
+        predecessor_claim_id: Option<[u8; 32]>,
+        beneficiary_key: [u8; 32],
+        template_hash: [u8; 32],
+        circuit_id: [u8; 32],
+        statement_digest: [u8; 32],
+        entitlement_sats: u64,
+        claim_outpoint: Option<Anchor>,
+        expiry_height: u64,
+        fee_rate_sat_per_vb: u64,
+        setup_instance_id: [u8; 32],
+        challenge_config_digest: [u8; 32],
+        assertion_binding_digest: Option<[u8; 32]>,
+    ) -> Option<Self> {
+        let claim_script = claim_script(statement_digest, beneficiary_key);
+        let (schema_version, control_block) = match assertion_binding_digest {
+            Some(binding) => (
+                PACKAGE_SCHEMA_VERSION_V2,
+                assertion_claim_control_block(
+                    statement_digest,
+                    binding,
+                    beneficiary_key,
+                    CLAIM_RECOVERY_LEAF_INDEX,
+                )?,
+            ),
+            None => (
+                PACKAGE_SCHEMA_VERSION,
+                claim_control_block(statement_digest, beneficiary_key)?,
+            ),
+        };
+
+        Some(Self {
+            schema_version,
+            profile,
+            claim_id,
+            predecessor_claim_id,
+            beneficiary_key,
+            template_hash,
+            circuit_id,
+            statement_digest,
+            assertion_binding_digest,
             entitlement_sats,
             discharge: DischargeState::Undischarged,
             claim_outpoint,
@@ -158,11 +260,22 @@ impl ClaimRecoveryPackage {
     /// statement digest and beneficiary key, and the carried control block must commit that script
     /// to the output key the scriptpubkey specifies. A package that fails this is not a claim.
     pub fn validate(&self) -> Result<(), PackageError> {
-        // 1 Schema version.
-        if self.schema_version != PACKAGE_SCHEMA_VERSION {
-            return Err(PackageError::UnsupportedSchemaVersion {
-                actual: self.schema_version,
-            });
+        // 1 Schema version, and the binding the version requires.
+        match self.schema_version {
+            PACKAGE_SCHEMA_VERSION => {
+                if self.assertion_binding_digest.is_some() {
+                    return Err(PackageError::UnexpectedAssertionBinding);
+                }
+            }
+            PACKAGE_SCHEMA_VERSION_V2 => {
+                let binding = self
+                    .assertion_binding_digest
+                    .ok_or(PackageError::MissingAssertionBinding)?;
+                if binding == [0u8; 32] {
+                    return Err(PackageError::ZeroAssertionBinding);
+                }
+            }
+            actual => return Err(PackageError::UnsupportedSchemaVersion { actual }),
         }
 
         // 2 Economy and timing must be usable.
@@ -179,7 +292,7 @@ impl ClaimRecoveryPackage {
             return Err(PackageError::ZeroBeneficiaryKey);
         }
 
-        // 3 The carried script must be the claim script for exactly this statement and key.
+        // 3 The carried script must be the recovery claim script for exactly this statement and key.
         let expected_script = claim_script(self.statement_digest, self.beneficiary_key);
         if self.claim_script != expected_script {
             return Err(PackageError::ClaimScriptMismatch);
@@ -191,7 +304,8 @@ impl ClaimRecoveryPackage {
         }
 
         // 4 The control block must commit the script to the claim output key.
-        let scriptpubkey = claim_scriptpubkey(self.statement_digest, self.beneficiary_key)
+        let scriptpubkey = self
+            .claim_scriptpubkey()
             .ok_or(PackageError::ClaimScriptpubkeyUnavailable)?;
         let output_key = bitcoin::secp256k1::XOnlyPublicKey::from_slice(&scriptpubkey[2..])
             .map_err(|_| PackageError::ClaimScriptpubkeyUnavailable)?;
@@ -216,12 +330,17 @@ impl ClaimRecoveryPackage {
 
     /// Returns the claim scriptpubkey this package recovers.
     pub fn claim_scriptpubkey(&self) -> Option<Vec<u8>> {
-        claim_scriptpubkey(self.statement_digest, self.beneficiary_key)
+        match self.assertion_binding_digest {
+            Some(binding) => {
+                assertion_claim_scriptpubkey(self.statement_digest, binding, self.beneficiary_key)
+            }
+            None => claim_scriptpubkey(self.statement_digest, self.beneficiary_key),
+        }
     }
 
     /// Returns the canonical encoding of the package.
     pub fn encode(&self) -> Vec<u8> {
-        let mut buffer = Vec::<u8>::with_capacity(256);
+        let mut buffer = Vec::<u8>::with_capacity(512);
 
         // 1 Identity and terms.
         buffer.push(self.schema_version);
@@ -238,6 +357,9 @@ impl ClaimRecoveryPackage {
         buffer.extend(self.template_hash);
         buffer.extend(self.circuit_id);
         buffer.extend(self.statement_digest);
+        if self.schema_version == PACKAGE_SCHEMA_VERSION_V2 {
+            buffer.extend(self.assertion_binding_digest.unwrap_or([0u8; 32]));
+        }
 
         // 2 Economy.
         buffer.extend(self.entitlement_sats.to_le_bytes());
@@ -272,6 +394,11 @@ impl ClaimRecoveryPackage {
 
         // 1 Identity and terms.
         let schema_version = reader.u8()?;
+        if schema_version != PACKAGE_SCHEMA_VERSION && schema_version != PACKAGE_SCHEMA_VERSION_V2 {
+            return Err(PackageError::UnsupportedSchemaVersion {
+                actual: schema_version,
+            });
+        }
         let profile_tag = reader.u8()?;
         let profile = ReleaseProfile::from_tag(profile_tag)
             .ok_or(PackageError::UnknownProfileTag(profile_tag))?;
@@ -285,6 +412,11 @@ impl ClaimRecoveryPackage {
         let template_hash = reader.key()?;
         let circuit_id = reader.key()?;
         let statement_digest = reader.key()?;
+        let assertion_binding_digest = if schema_version == PACKAGE_SCHEMA_VERSION_V2 {
+            Some(reader.key()?)
+        } else {
+            None
+        };
 
         // 2 Economy.
         let entitlement_sats = reader.u64()?;
@@ -330,6 +462,7 @@ impl ClaimRecoveryPackage {
             template_hash,
             circuit_id,
             statement_digest,
+            assertion_binding_digest,
             entitlement_sats,
             discharge,
             claim_outpoint,
@@ -368,8 +501,14 @@ impl ClaimRecoveryPackage {
 /// Deterministic rejection reasons of the recovery package.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum PackageError {
-    /// The schema version is not the frozen version.
+    /// The schema version is not a supported version.
     UnsupportedSchemaVersion { actual: u8 },
+    /// A v2 package does not carry the assertion binding digest.
+    MissingAssertionBinding,
+    /// A v1 package carries an assertion binding digest.
+    UnexpectedAssertionBinding,
+    /// The assertion binding digest is all zeroes.
+    ZeroAssertionBinding,
     /// The profile tag is not a frozen profile.
     UnknownProfileTag(u8),
     /// The discharge tag is not a frozen state.

@@ -10,8 +10,11 @@
 mod recovery_package_tests {
     use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::{
         ClaimRecoveryPackage, DischargeState, PackageError, PACKAGE_SCHEMA_VERSION,
+        PACKAGE_SCHEMA_VERSION_V2,
     };
-    use cube::constructive::contracts::fixed_split_vault_v1::{claim_script, claim_scriptpubkey};
+    use cube::constructive::contracts::fixed_split_vault_v1::{
+        assertion_claim_scriptpubkey, claim_script, claim_scriptpubkey,
+    };
     use cube::model::fixed_split_vault_v1::manifest::Anchor;
     use cube::model::fixed_split_vault_v1::ReleaseProfile;
 
@@ -24,6 +27,7 @@ mod recovery_package_tests {
     const SETUP_INSTANCE_ID: [u8; 32] = [0x77; 32];
     const CHALLENGE_CONFIG_DIGEST: [u8; 32] = [0x88; 32];
     const CLAIM_TXID: [u8; 32] = [0xcc; 32];
+    const ASSERTION_BINDING: [u8; 32] = [0x5a; 32];
 
     /// One labelled mutation of a package.
     type Mutation = (&'static str, Box<dyn Fn(&mut ClaimRecoveryPackage)>);
@@ -59,6 +63,27 @@ mod recovery_package_tests {
         .expect("the fixture package must construct")
     }
 
+    /// Returns a valid two-leaf package for the same claim.
+    fn fixture_v2() -> ClaimRecoveryPackage {
+        ClaimRecoveryPackage::new_with_assertion(
+            ReleaseProfile::ArgoSplitRegtest,
+            CLAIM_ID,
+            Some(PREDECESSOR_CLAIM_ID),
+            BENEFICIARY_KEY,
+            TEMPLATE_HASH,
+            CIRCUIT_ID,
+            STATEMENT_DIGEST,
+            ASSERTION_BINDING,
+            ENTITLEMENT_SATS,
+            Some(Anchor::new(CLAIM_TXID, 0)),
+            EXPIRY_HEIGHT,
+            FEE_RATE_SAT_PER_VB,
+            SETUP_INSTANCE_ID,
+            CHALLENGE_CONFIG_DIGEST,
+        )
+        .expect("the v2 fixture package must construct")
+    }
+
     #[test]
     fn package_round_trips_and_is_self_describing() {
         let package = fixture();
@@ -88,6 +113,79 @@ mod recovery_package_tests {
         assert!(decoded.is_recoverable());
         assert!(!decoded.is_stale_at(EXPIRY_HEIGHT - 1));
         assert!(decoded.is_stale_at(EXPIRY_HEIGHT));
+    }
+
+    #[test]
+    fn two_leaf_package_round_trips_and_recovers_the_v2_key() {
+        let package = fixture_v2();
+        package.validate().expect("the v2 fixture must be valid");
+        assert_eq!(package.schema_version, PACKAGE_SCHEMA_VERSION_V2);
+
+        let bytes = package.encode();
+        let decoded = ClaimRecoveryPackage::decode(&bytes).expect("v2 bytes must decode");
+        assert_eq!(decoded, package);
+        assert_eq!(decoded.encode(), bytes);
+
+        // The recovery leaf is unchanged; only the output key and control block differ.
+        assert_eq!(
+            decoded.claim_script,
+            claim_script(STATEMENT_DIGEST, BENEFICIARY_KEY)
+        );
+        assert_eq!(
+            decoded.control_block.len(),
+            65,
+            "33-byte header plus one sibling"
+        );
+        assert_eq!(
+            decoded.claim_scriptpubkey(),
+            assertion_claim_scriptpubkey(STATEMENT_DIGEST, ASSERTION_BINDING, BENEFICIARY_KEY)
+        );
+        assert_ne!(
+            decoded.claim_scriptpubkey(),
+            claim_scriptpubkey(STATEMENT_DIGEST, BENEFICIARY_KEY),
+            "a two-leaf claim must not share the single-leaf output key"
+        );
+        assert_ne!(
+            decoded.control_block,
+            fixture().control_block,
+            "the recovery path through a two-leaf taproot needs its own control block"
+        );
+    }
+
+    #[test]
+    fn v2_package_binds_the_assertion_digest() {
+        let package = fixture_v2();
+        let reference = package.digest();
+
+        // 1 The digest commits the binding.
+        let mut changed = package.clone();
+        changed.assertion_binding_digest = Some([0x5b; 32]);
+        assert_ne!(changed.digest(), reference);
+        assert_eq!(
+            changed.validate(),
+            Err(PackageError::ControlBlockDoesNotCommit)
+        );
+
+        // 2 A v2 package without a binding is not a v2 package.
+        let mut missing = package.clone();
+        missing.assertion_binding_digest = None;
+        assert_eq!(
+            missing.validate(),
+            Err(PackageError::MissingAssertionBinding)
+        );
+
+        // 3 A v1 package must not carry one.
+        let mut unexpected = fixture();
+        unexpected.assertion_binding_digest = Some(ASSERTION_BINDING);
+        assert_eq!(
+            unexpected.validate(),
+            Err(PackageError::UnexpectedAssertionBinding)
+        );
+
+        // 4 A zero binding is not a digest.
+        let mut zero = package;
+        zero.assertion_binding_digest = Some([0u8; 32]);
+        assert_eq!(zero.validate(), Err(PackageError::ZeroAssertionBinding));
     }
 
     #[test]
@@ -187,8 +285,22 @@ mod recovery_package_tests {
         let cases: Vec<InvalidCase> = vec![
             (
                 "schema",
-                Box::new(|p: &mut ClaimRecoveryPackage| p.schema_version = 2),
-                PackageError::UnsupportedSchemaVersion { actual: 2 },
+                Box::new(|p: &mut ClaimRecoveryPackage| p.schema_version = 3),
+                PackageError::UnsupportedSchemaVersion { actual: 3 },
+            ),
+            (
+                "v2 without binding",
+                Box::new(|p: &mut ClaimRecoveryPackage| {
+                    p.schema_version = PACKAGE_SCHEMA_VERSION_V2
+                }),
+                PackageError::MissingAssertionBinding,
+            ),
+            (
+                "v1 with binding",
+                Box::new(|p: &mut ClaimRecoveryPackage| {
+                    p.assertion_binding_digest = Some(ASSERTION_BINDING)
+                }),
+                PackageError::UnexpectedAssertionBinding,
             ),
             (
                 "zero entitlement",

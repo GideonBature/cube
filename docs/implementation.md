@@ -170,11 +170,12 @@ For the exit-ladder/Connector design, enumerate what transaction linkage proves 
 
 **Status (24 October 2026):** the participant-scoped binding is implemented in
 `src/constructive/graph/assertion.rs` and specified in `docs/bind_01.md`. It adds `AuthenticatedInput`
-to `cube-argo`, the claim assertion leaf, the `Assert` transaction, `Take` and `Disprove`, with
-offline byte tests and a regtest run that rejects a premature take, a wrong signer, a missing
-signature and a wrong secret, and accepts the honest paths. BIND-01 remains open for a unilateral
-operator: Argo's MAC interface supplies no public input-label opening, so the assertion input is
-signed by the participant whose value is at stake.
+to `cube-argo`, the claim assertion leaf, the `Assert` transaction, `Take` and `Disprove`, and
+`ClaimRecoveryPackage` schema v2 so a two-leaf claim keeps its recovery leaf. Offline byte tests and
+a regtest run reject a premature take, a wrong signer, a missing signature and a wrong secret, and
+accept the honest paths, including recovery through a v2 package. BIND-01 remains open for a
+unilateral operator: Argo's MAC interface supplies no public input-label opening, so the assertion
+input is signed by the participant whose value is at stake.
 
 ## 6. Work package P2: reference contract model and canonical schema
 

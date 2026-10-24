@@ -18,9 +18,9 @@
 //!   operator settlement and `Disprove` is the secret-based dispute. The construction and its
 //!   remaining gap are specified in `docs/bind_01.md`.
 //!
-//! Not implemented: the `CooperativeSettle` edge. `Assert`, `Take` and `Disprove` exist as a
-//! mechanism but are not yet attached to the frozen v1 claim: a claim that carries the assertion
-//! leaf needs a recovery-package v2, which is the next step rather than a silent script change.
+//! Not implemented: the `CooperativeSettle` edge. A two-leaf claim keeps its recovery branch in a
+//! v2 `ClaimRecoveryPackage` (`PACKAGE_SCHEMA_VERSION_V2`); `Assert`, `Take` and `Disprove` are
+//! attached to that claim shape, while the v1 package continues to describe the single-leaf claim.
 //! `GRAPH-01` therefore stays open.
 //!
 //! # Authorization
@@ -34,8 +34,9 @@
 //!   commitment, so no committed byte can change after signing. `tests/liftv2_regtest.rs` shows
 //!   Bitcoin Core accepting the honest spend and rejecting the same spend with one digest byte
 //!   changed.
-//! - A claim output has no key path. Its single tapscript leaf requires the named beneficiary's
-//!   signature, and spending it reveals the committed digest in the witness.
+//! - A claim output has no key path. Its recovery leaf requires the named beneficiary's signature,
+//!   and spending it reveals the committed digest in the witness. A v2 claim adds an assertion leaf
+//!   that requires the same beneficiary's signature over the `Assert` sighash.
 //! - A Cube entry's own authorization is BLS (`Call::bls_verify`) on the engine path. It is neither
 //!   BIP-340 nor checked by the relation.
 //!

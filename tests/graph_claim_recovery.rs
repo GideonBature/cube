@@ -41,6 +41,29 @@ fn package() -> ClaimRecoveryPackage {
     .expect("the fixture package must build")
 }
 
+/// A two-leaf package for the same claim, carrying an assertion binding digest.
+fn package_v2() -> ClaimRecoveryPackage {
+    ClaimRecoveryPackage::new_with_assertion(
+        ReleaseProfile::ArgoSplitRegtest,
+        [0xa1; 32],
+        None,
+        BENEFICIARY_KEY,
+        [0x22; 32],
+        [0x33; 32],
+        STATEMENT_DIGEST,
+        [0x5b; 32],
+        ENTITLEMENT_SATS,
+        Some(cube::model::fixed_split_vault_v1::manifest::Anchor::new(
+            CLAIM_TXID, 0,
+        )),
+        1_000,
+        2,
+        [0xbb; 32],
+        [0xcc; 32],
+    )
+    .expect("the v2 fixture package must build")
+}
+
 /// The claim outpoint the package refers to.
 fn claim_outpoint() -> OutPoint {
     OutPoint {
@@ -83,6 +106,54 @@ fn recovery() -> ClaimRecovery {
 /// The accept-everything fee range used where the fee itself is not under test.
 fn wide_bounds() -> FeeBounds {
     FeeBounds::new(0, 10_000)
+}
+
+#[test]
+fn a_two_leaf_claim_recovers_through_the_v2_package() {
+    let v2 = package_v2();
+    v2.validate().expect("the v2 package must be valid");
+    let prevout = TxOut {
+        value: Amount::from_sat(ENTITLEMENT_SATS),
+        script_pubkey: ScriptBuf::from_bytes(v2.claim_scriptpubkey().expect("v2 scriptpubkey")),
+    };
+
+    let recovery = ClaimRecovery::new(&v2, &prevout, destination(), FEE_SATS).expect("v2 recovery");
+    let witness = recovery.witness([0x11u8; 64]);
+    assert_eq!(witness.len(), 3);
+    assert_eq!(witness[1], v2.claim_script);
+    assert_eq!(witness[2], v2.control_block);
+    assert_eq!(v2.control_block.len(), 65);
+
+    // The v1 single-leaf output is not the claim this package describes.
+    let v1_prevout = TxOut {
+        value: Amount::from_sat(ENTITLEMENT_SATS),
+        script_pubkey: ScriptBuf::from_bytes(
+            cube::constructive::contracts::fixed_split_vault_v1::claim_scriptpubkey(
+                STATEMENT_DIGEST,
+                BENEFICIARY_KEY,
+            )
+            .expect("v1 scriptpubkey"),
+        ),
+    };
+    assert_eq!(
+        ClaimRecovery::new(&v2, &v1_prevout, destination(), FEE_SATS),
+        Err(ClaimRecoveryError::ClaimScriptMismatch)
+    );
+
+    // The signing hash commits the two-leaf prevout script, so it differs from the v1 spend.
+    let v2_hash = recovery.signing_hash(&prevout).expect("v2 sighash");
+    let v1_claim_prevout = TxOut {
+        value: Amount::from_sat(ENTITLEMENT_SATS),
+        script_pubkey: v1_prevout.script_pubkey.clone(),
+    };
+    let v1_recovery = ClaimRecovery::new(&package(), &v1_claim_prevout, destination(), FEE_SATS)
+        .expect("v1 recovery");
+    assert_ne!(
+        v1_recovery
+            .signing_hash(&v1_claim_prevout)
+            .expect("v1 sighash"),
+        v2_hash
+    );
 }
 
 #[test]

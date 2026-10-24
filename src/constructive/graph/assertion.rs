@@ -36,7 +36,10 @@
 //! - **Which output is contested.** A claim, a fee output or an operator bond all work as the
 //!   `Assert` input; the graph decision stays in `GRAPH-01`.
 
-use crate::constructive::contracts::fixed_split_vault_v1::claim::claim_script;
+use crate::constructive::contracts::fixed_split_vault_v1::claim::{
+    assertion_claim_script, assertion_claim_scriptpubkey, assertion_claim_taproot, claim_script,
+    CLAIM_ASSERTION_LEAF_INDEX, CLAIM_RECOVERY_LEAF_INDEX,
+};
 use crate::constructive::graph::successor_funding::FeeBounds;
 use crate::constructive::taproot::{TapLeaf, TapRoot};
 use crate::transmutative::hash::{Hash, HashTag};
@@ -101,14 +104,7 @@ impl AssertionClaim {
         if beneficiary_key == [0u8; 32] {
             return Err(AssertionError::ZeroBeneficiaryKey);
         }
-        let taproot = TapRoot::script_path_only_multi(vec![
-            TapLeaf::new(claim_script(statement_digest, beneficiary_key)),
-            TapLeaf::new(assertion_claim_script(
-                statement_digest,
-                binding_digest,
-                beneficiary_key,
-            )),
-        ]);
+        let taproot = assertion_claim_taproot(statement_digest, binding_digest, beneficiary_key);
         Ok(Self {
             statement_digest,
             binding_digest,
@@ -119,10 +115,13 @@ impl AssertionClaim {
 
     /// Returns the claim scriptpubkey.
     pub fn scriptpubkey(&self) -> Result<ScriptBuf, AssertionError> {
-        self.taproot
-            .spk()
-            .map(ScriptBuf::from_bytes)
-            .ok_or(AssertionError::TaprootDegenerate)
+        assertion_claim_scriptpubkey(
+            self.statement_digest,
+            self.binding_digest,
+            self.beneficiary_key,
+        )
+        .map(ScriptBuf::from_bytes)
+        .ok_or(AssertionError::TaprootDegenerate)
     }
 
     /// Returns the recovery leaf script.
@@ -142,7 +141,7 @@ impl AssertionClaim {
     /// Returns the control block for the recovery leaf (index 0).
     pub fn recovery_control_block(&self) -> Result<Vec<u8>, AssertionError> {
         self.taproot
-            .control_block(0)
+            .control_block(CLAIM_RECOVERY_LEAF_INDEX)
             .map(|block| block.to_vec())
             .ok_or(AssertionError::TaprootDegenerate)
     }
@@ -150,7 +149,7 @@ impl AssertionClaim {
     /// Returns the control block for the assertion leaf (index 1).
     pub fn assertion_control_block(&self) -> Result<Vec<u8>, AssertionError> {
         self.taproot
-            .control_block(1)
+            .control_block(CLAIM_ASSERTION_LEAF_INDEX)
             .map(|block| block.to_vec())
             .ok_or(AssertionError::TaprootDegenerate)
     }
@@ -192,29 +191,6 @@ impl AssertionClaim {
             self.assertion_control_block()?,
         ]))
     }
-}
-
-/// Returns the v2 claim assertion leaf:
-///
-/// ```text
-/// 0x20 <statement:32> 0x75 0x20 <binding:32> 0x75 0x20 <beneficiary:32> 0xac
-/// ```
-pub fn assertion_claim_script(
-    statement_digest: [u8; 32],
-    binding_digest: [u8; 32],
-    beneficiary_key: [u8; 32],
-) -> Vec<u8> {
-    let mut script = Vec::with_capacity(102);
-    script.push(OP_PUSH_32);
-    script.extend(statement_digest);
-    script.push(OP_DROP);
-    script.push(OP_PUSH_32);
-    script.extend(binding_digest);
-    script.push(OP_DROP);
-    script.push(OP_PUSH_32);
-    script.extend(beneficiary_key);
-    script.push(OP_CHECKSIG);
-    script
 }
 
 /// Everything the assertion output commits to.
@@ -517,7 +493,7 @@ impl Assertion {
     /// The control block for the `Take` leaf (index 0).
     pub fn take_control_block(&self) -> Result<Vec<u8>, AssertionError> {
         self.taproot
-            .control_block(0)
+            .control_block(CLAIM_RECOVERY_LEAF_INDEX)
             .map(|block| block.to_vec())
             .ok_or(AssertionError::TaprootDegenerate)
     }
@@ -525,7 +501,7 @@ impl Assertion {
     /// The control block for the `Disprove` leaf (index 1).
     pub fn disprove_control_block(&self) -> Result<Vec<u8>, AssertionError> {
         self.taproot
-            .control_block(1)
+            .control_block(CLAIM_ASSERTION_LEAF_INDEX)
             .map(|block| block.to_vec())
             .ok_or(AssertionError::TaprootDegenerate)
     }

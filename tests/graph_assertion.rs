@@ -11,9 +11,12 @@ use bitcoin::sighash::{Prevouts, SighashCache};
 use bitcoin::taproot::ControlBlock;
 use bitcoin::transaction::Version;
 use bitcoin::{Amount, OutPoint, ScriptBuf, Sequence, TxOut, Txid, Witness};
+use cube::constructive::contracts::fixed_split_vault_v1::claim::{
+    assertion_claim_script, parse_assertion_claim_script,
+};
 use cube::constructive::graph::assertion::{
-    assertion_claim_script, disclosure_secret_commitment, take_script, Assertion, AssertionAnchor,
-    AssertionClaim, AssertionError, AssertionTerms, ContestedOutput, DisproveSpend, TakeSpend,
+    disclosure_secret_commitment, take_script, Assertion, AssertionAnchor, AssertionClaim,
+    AssertionError, AssertionTerms, ContestedOutput, DisproveSpend, TakeSpend,
     ASSERTION_SCHEMA_VERSION,
 };
 use cube::constructive::graph::successor_funding::FeeBounds;
@@ -223,6 +226,14 @@ fn the_scripts_have_the_frozen_layout() {
     let claim = assertion_claim_script(STATEMENT, binding, BENEFICIARY);
     assert_eq!(claim.len(), 102);
     assert_ne!(claim, assertion.disprove_script());
+    assert_eq!(
+        parse_assertion_claim_script(&claim),
+        Some((STATEMENT, binding, BENEFICIARY))
+    );
+    assert_eq!(
+        parse_assertion_claim_script(&assertion.disprove_script()),
+        None
+    );
 }
 
 #[test]
