@@ -9,8 +9,8 @@
 //! cargo test -p cube-proof --release --test proof_to_argo -- --ignored --nocapture
 //! ```
 //!
-//! Measured in release on an aarch64 laptop: setup 2.9 s, prove 2.0 s, garble 0.8 s, whole test
-//! 8.2 s. Debug multiplies the cryptographic work by a large factor, so the test stays opt-in.
+//! Measured in release on an aarch64 laptop: setup 6.7 s, prove 4.3 s, garble 0.8 s, whole test
+//! 14.4 s. Debug multiplies the cryptographic work by a large factor, so the test stays opt-in.
 //!
 //! The setup is a single-party **trusted test setup**: this test proves the integration, not a
 //! deployment.
@@ -41,7 +41,13 @@ fn a_real_proof_is_accepted_by_argo_and_a_tampered_proof_discloses() {
 }
 
 fn scenario() {
-    let circuit = FundSplitCircuit::from_manifest(common::manifest_bytes(), 0);
+    let fixture = common::fixture();
+    let circuit = FundSplitCircuit::from_parts(
+        fixture.manifest_bytes(),
+        fixture.previous_state,
+        fixture.resulting_state,
+        0,
+    );
     let statement = circuit.statement;
 
     // 1 A deterministic seed is acceptable for a fixture and unacceptable for a deployment.

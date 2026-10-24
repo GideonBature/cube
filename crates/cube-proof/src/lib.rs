@@ -6,17 +6,18 @@
 //!
 //! # What exists
 //!
-//! - `fund_split`: the `FundSplit` statement binding. It recomputes the tagged SHA-256 statement
-//!   digest in-circuit from the 629 manifest bytes and constrains the 70/30 split and the remainder
-//!   range from the payout amounts the manifest itself commits to.
+//! - `fund_split`: the `FundSplit` relation. It recomputes the tagged statement digest in-circuit
+//!   from the 629 manifest bytes, binds both 343-byte state preimages to the digests the manifest
+//!   commits, and enforces the funding transition: phase, instance identity, balances, shadows,
+//!   sequences and the 70/30 split.
 //! - `groth16`: setup, proving and verification for that relation. A key produced here is a
 //!   single-party **trusted test setup**, not a deployment.
 //!
 //! # What does not exist
 //!
 //! - **No trusted or participant-scoped setup.** Whoever runs [`groth16::setup`] holds the trapdoor.
-//! - **No state-transition validity.** Balances, caller sequences, replay protection and the
-//!   contract's own arithmetic are not constrained yet; only what the manifest commits to is.
+//! - **No replay protection in-circuit.** The consumed-operation set is unbounded and is not
+//!   committed by the state digest, so the relation cannot show an operation id was unused.
 //! - **No authorization.** The caller signature is not checked in-circuit. BIP-340 over BN254 is a
 //!   separate gadget and a gate item of its own; nothing here pretends otherwise.
 //! - **No chain binding.** The public scalar is assumed to have been read from an authenticated
@@ -35,6 +36,6 @@ pub mod fund_split;
 pub mod groth16;
 
 pub use fund_split::{
-    statement_scalar, tagged_statement_digest, FundSplitCircuit, MANIFEST_ENCODED_LEN,
-    PAYOUTS_OFFSET, PAYOUT_ENCODED_LEN, STATEMENT_TAG,
+    statement_scalar, tagged_state_digest, tagged_statement_digest, FundSplitCircuit,
+    MANIFEST_ENCODED_LEN, PAYOUTS_OFFSET, PAYOUT_ENCODED_LEN, STATEMENT_TAG, STATE_ENCODED_LEN,
 };
