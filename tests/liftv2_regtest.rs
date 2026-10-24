@@ -32,11 +32,29 @@ mod liftv2_regtest_tests {
     use cube::constructive::taproot::TapRoot;
     use cube::constructive::txo::lift::lift_versions::liftv2::liftv2::return_liftv2_taproot;
     use cube::transmutative::codec::csv::{CSVEncode, CSVFlag};
+    use cube::transmutative::hash::{Hash as CubeHash, HashTag};
+    use cube::transmutative::musig::keyagg::MusigKeyAggCtx;
+    use cube::transmutative::musig::session::MusigSessionCtx;
+    use cube::transmutative::secp::schnorr::{self, SchnorrSigningMode};
+    use secp::{Point, Scalar};
     use serde_json::json;
     use std::path::PathBuf;
 
     /// The relative timelock the LiftV2 refund branch commits to, in blocks.
     const REFUND_DELAY_BLOCKS: u16 = 12_960;
+
+    /// Serialises the node-backed tests.
+    ///
+    /// They share one regtest node and one wallet, and one of them mines twelve thousand blocks,
+    /// so they must not run concurrently even though the test harness runs tests in parallel.
+    static NODE_TEST_LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+    /// Acquires the node-test lock, tolerating a lock poisoned by an earlier failing test.
+    fn node_test_guard() -> std::sync::MutexGuard<'static, ()> {
+        NODE_TEST_LOCK
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+    }
 
     /// Alice's deposit key.
     const ALICE_SECRET: [u8; 32] = [
@@ -163,6 +181,7 @@ mod liftv2_regtest_tests {
             );
             return;
         };
+        let _node_guard = node_test_guard();
 
         // 2 Ensure a wallet exists, then mature its coinbase outputs.
         //    A wallet is created once; a second run on the same datadir loads the existing one.
@@ -243,13 +262,29 @@ mod liftv2_regtest_tests {
         );
         println!("immature refund rejected with: {reason}");
 
-        // 7 Mine past the relative timelock, in batches so a single RPC call cannot time out.
+        // 7 Mine past the relative timelock.
+        //
+        // Batches are small because a single large `generatetoaddress` call can exceed the RPC
+        // read timeout. A timed-out batch may still have mined, and mining extra blocks cannot
+        // invalidate the test, so a retry is safe.
         let mut mined = 0u32;
         while mined < u32::from(REFUND_DELAY_BLOCKS) {
-            let batch = (u32::from(REFUND_DELAY_BLOCKS) - mined).min(400);
-            let _: Vec<String> = rpc
-                .call("generatetoaddress", &[json!(batch), json!(mining_address)])
-                .expect("mine past maturity");
+            let batch = (u32::from(REFUND_DELAY_BLOCKS) - mined).min(100);
+            let mut attempts = 0;
+            loop {
+                match rpc.call::<Vec<String>>(
+                    "generatetoaddress",
+                    &[json!(batch), json!(mining_address)],
+                ) {
+                    Ok(_) => break,
+                    Err(error) if attempts < 5 => {
+                        attempts += 1;
+                        println!("retrying block batch after transport error: {error}");
+                        std::thread::sleep(std::time::Duration::from_secs(1));
+                    }
+                    Err(error) => panic!("mine past maturity: {error}"),
+                }
+            }
             mined += batch;
         }
 
@@ -360,5 +395,294 @@ mod liftv2_regtest_tests {
             Witness::from_slice(&[signature.serialize().to_vec(), script, control_block]);
 
         tx
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Cooperative key path: MuSig2 over the taproot-tweaked aggregate key.
+    // ---------------------------------------------------------------------------------------
+
+    /// Returns the compressed point for an x-only key.
+    fn point_from_xonly(key: [u8; 32]) -> Point {
+        let mut compressed = Vec::<u8>::with_capacity(33);
+        compressed.push(0x02);
+        compressed.extend(key);
+        Point::from_slice(&compressed).expect("valid point")
+    }
+
+    /// Returns the secret-key scalar of a fixture, normalised to the even-Y lift.
+    ///
+    /// `return_liftv2_taproot` lifts every x-only key to its even-Y point, so a signer whose
+    /// secret produces an odd-Y point must negate its scalar to be recognised as that signer.
+    fn scalar_of(secret: [u8; 32]) -> Scalar {
+        let scalar = Scalar::from_slice(&secret).expect("valid scalar");
+        scalar.negate_if(scalar.base_point_mul().parity())
+    }
+
+    /// Derives a deterministic MuSig2 nonce secret.
+    ///
+    /// Real deployments derive nonces with a fresh random seed and must never reuse them; a
+    /// deterministic derivation is used here so the fixture is reproducible.
+    fn secret_nonce(secret: [u8; 32], message: [u8; 32], index: u8) -> Scalar {
+        let mut preimage = Vec::<u8>::with_capacity(65);
+        preimage.extend(secret);
+        preimage.extend(message);
+        preimage.push(index);
+        let digest = CubeHash::hash(
+            &preimage,
+            Some(HashTag::CustomString("Cube/musig/nonce/v0".to_string())),
+        );
+        Scalar::from_slice(&digest).expect("valid nonce scalar")
+    }
+
+    /// Returns the aggregate key context for the LiftV2 key path, with the taproot tweak applied.
+    fn liftv2_key_agg_ctx(taproot: &TapRoot) -> MusigKeyAggCtx {
+        let keys = vec![
+            point_from_xonly(alice_xonly()),
+            point_from_xonly(engine_xonly()),
+        ];
+        let tweak = Scalar::from_slice(&taproot.tap_tweak()).expect("valid taproot tweak");
+        MusigKeyAggCtx::new(&keys, Some(tweak)).expect("key aggregation")
+    }
+
+    /// Produces a MuSig2 signature over `message` for the LiftV2 key path.
+    ///
+    /// Both signers are simulated in one process, which is adequate for the Bitcoin question being
+    /// asked here (does the tweaked aggregate signature satisfy the output key?) but is not a
+    /// multi-party protocol test.
+    fn liftv2_musig_sign(taproot: &TapRoot, message: [u8; 32]) -> ([u8; 64], [u8; 32]) {
+        let key_agg_ctx = liftv2_key_agg_ctx(taproot);
+        let agg_key_xonly = key_agg_ctx.agg_key().serialize_xonly();
+
+        let mut session = MusigSessionCtx::new(&key_agg_ctx, message).expect("session");
+
+        // 1 Exchange public nonces.
+        for (secret, key) in [
+            (ALICE_SECRET, alice_xonly()),
+            (ENGINE_SECRET, engine_xonly()),
+        ] {
+            let hiding = secret_nonce(secret, message, 0);
+            let binding = secret_nonce(secret, message, 1);
+            assert!(
+                session.insert_nonce(
+                    point_from_xonly(key),
+                    hiding.base_point_mul(),
+                    binding.base_point_mul(),
+                ),
+                "nonce insertion"
+            );
+        }
+        assert!(session.ready(), "session must be ready with both nonces");
+
+        // 2 Exchange partial signatures.
+        for (secret, key) in [
+            (ALICE_SECRET, alice_xonly()),
+            (ENGINE_SECRET, engine_xonly()),
+        ] {
+            let hiding = secret_nonce(secret, message, 0);
+            let binding = secret_nonce(secret, message, 1);
+            let partial = session
+                .partial_sign(scalar_of(secret), hiding, binding)
+                .expect("partial signature");
+            assert!(
+                session.insert_partial_sig(point_from_xonly(key), partial),
+                "partial signature insertion"
+            );
+        }
+
+        // 3 Aggregate.
+        let signature = session.full_agg_sig().expect("aggregate signature");
+        (signature, agg_key_xonly)
+    }
+
+    /// With only one signer the aggregate must not exist, so the key path is not open to Alice
+    /// alone. This is the reason a deposit cannot be taken unilaterally through the key path.
+    #[test]
+    fn liftv2_key_path_requires_both_signers() {
+        let taproot = liftv2_taproot();
+        let key_agg_ctx = liftv2_key_agg_ctx(&taproot);
+        let message = [0xcdu8; 32];
+        let mut session = MusigSessionCtx::new(&key_agg_ctx, message).expect("session");
+
+        // 1 Only Alice contributes a nonce and a partial signature.
+        let hiding = secret_nonce(ALICE_SECRET, message, 0);
+        let binding = secret_nonce(ALICE_SECRET, message, 1);
+        assert!(session.insert_nonce(
+            point_from_xonly(alice_xonly()),
+            hiding.base_point_mul(),
+            binding.base_point_mul(),
+        ));
+
+        // 2 The session is not ready, so no aggregate nonce exists yet.
+        assert!(!session.ready());
+        assert!(session.agg_nonce().is_none());
+
+        // 3 No signature can be aggregated. The blame list counts signers without a partial
+        //   signature, which at this point is both of them.
+        assert_eq!(session.blame_list().len(), 2);
+        assert!(session.full_agg_sig().is_none());
+    }
+
+    #[test]
+    fn liftv2_cooperative_key_path_signature_verifies() {
+        let taproot = liftv2_taproot();
+
+        // 1 The MuSig aggregate over the taproot tweak must equal the on-chain output key.
+        let key_agg_ctx = liftv2_key_agg_ctx(&taproot);
+        let spk = taproot.spk().expect("spk");
+        assert_eq!(
+            hex::encode(key_agg_ctx.agg_key().serialize_xonly()),
+            hex::encode(&spk[2..34]),
+            "the tweaked MuSig aggregate must equal the taproot output key"
+        );
+
+        // 2 A MuSig2 signature over an arbitrary message must verify against that key, using both
+        //   the repository's verifier and the independent secp256k1 verifier.
+        let message = [0xabu8; 32];
+        let (signature, agg_key_xonly) = liftv2_musig_sign(&taproot, message);
+
+        assert!(
+            schnorr::verify_xonly(
+                agg_key_xonly,
+                message,
+                signature,
+                SchnorrSigningMode::BIP340
+            ),
+            "the repository's verifier rejected its own MuSig2 signature"
+        );
+
+        let secp = Secp256k1::new();
+        secp.verify_schnorr(
+            &bitcoin::secp256k1::schnorr::Signature::from_slice(&signature).expect("signature"),
+            &Message::from_digest(message),
+            &bitcoin::secp256k1::XOnlyPublicKey::from_slice(&agg_key_xonly).expect("key"),
+        )
+        .expect("secp256k1 rejected the MuSig2 signature");
+    }
+
+    // ---------------------------------------------------------------------------------------
+    // Node-gated: the cooperative key-path spend.
+    // ---------------------------------------------------------------------------------------
+
+    #[test]
+    fn liftv2_cooperative_key_path_spend_on_regtest() {
+        // 1 Skip when no regtest node is configured.
+        let Some(rpc) = regtest_client() else {
+            println!(
+                "SKIPPED: set CUBE_REGTEST_DATADIR to a running regtest datadir to run this test"
+            );
+            return;
+        };
+
+        let _node_guard = node_test_guard();
+
+        // 2 Ensure a wallet exists and has mature funds.
+        if rpc
+            .call::<serde_json::Value>("createwallet", &[json!("cube_liftv2")])
+            .is_err()
+        {
+            let _ = rpc.call::<serde_json::Value>("loadwallet", &[json!("cube_liftv2")]);
+        }
+        let mining_address: String = rpc.call("getnewaddress", &[]).expect("getnewaddress");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(101), json!(mining_address)])
+            .expect("mature coinbase");
+
+        // 3 Fund the deposit address.
+        let taproot = liftv2_taproot();
+        let deposit_spk = ScriptBuf::from_bytes(taproot.spk().expect("spk"));
+        let deposit_address =
+            Address::from_script(&deposit_spk, Network::Regtest).expect("valid address");
+
+        let funding_txid: String = rpc
+            .call(
+                "sendtoaddress",
+                &[json!(deposit_address.to_string()), json!(0.5)],
+            )
+            .expect("sendtoaddress");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("confirm deposit");
+
+        // 4 Locate the funded output.
+        let wallet_tx: serde_json::Value = rpc
+            .call("gettransaction", &[json!(funding_txid), json!(true)])
+            .expect("gettransaction");
+        let funding_tx: Transaction = bitcoin::consensus::deserialize(
+            &hex::decode(wallet_tx["hex"].as_str().expect("hex")).expect("hex decode"),
+        )
+        .expect("decode funding transaction");
+        let (vout_index, prevout) = funding_tx
+            .output
+            .iter()
+            .enumerate()
+            .find(|(_, output)| output.script_pubkey == deposit_spk)
+            .map(|(index, output)| (index as u32, output.clone()))
+            .expect("the deposit output must be present");
+
+        // 5 Build the cooperative spend: key path, so the witness is the signature alone.
+        let spend_spk = address_to_script(
+            &rpc.call::<String>("getnewaddress", &[])
+                .expect("getnewaddress"),
+        );
+        let mut tx = Transaction {
+            version: bitcoin::transaction::Version::TWO,
+            lock_time: LockTime::ZERO,
+            input: vec![TxIn {
+                previous_output: OutPoint {
+                    txid: funding_tx.compute_txid(),
+                    vout: vout_index,
+                },
+                script_sig: ScriptBuf::new(),
+                sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
+                witness: Witness::new(),
+            }],
+            output: vec![TxOut {
+                value: Amount::from_sat(prevout.value.to_sat() - 2_000),
+                script_pubkey: spend_spk,
+            }],
+        };
+
+        // 6 Sign the BIP-341 *key-path* sighash, which commits to no leaf at all.
+        let sighash = SighashCache::new(&tx)
+            .taproot_signature_hash(
+                0,
+                &Prevouts::All(std::slice::from_ref(&prevout)),
+                None,
+                None,
+                TapSighashType::Default,
+            )
+            .expect("sighash");
+        let (signature, agg_key_xonly) = liftv2_musig_sign(&taproot, sighash.to_byte_array());
+
+        // 6.a The signature must satisfy the output key before any RPC round trip.
+        let secp = Secp256k1::new();
+        secp.verify_schnorr(
+            &bitcoin::secp256k1::schnorr::Signature::from_slice(&signature).expect("signature"),
+            &Message::from_digest(sighash.to_byte_array()),
+            &bitcoin::secp256k1::XOnlyPublicKey::from_slice(&agg_key_xonly).expect("key"),
+        )
+        .expect("the cooperative signature must verify locally against the output key");
+
+        tx.input[0].witness = Witness::from_slice(&[signature.to_vec()]);
+
+        // 7 Bitcoin Core must accept the cooperative spend immediately: no timelock, no script.
+        let accepted: String = rpc
+            .call(
+                "sendrawtransaction",
+                &[json!(bitcoin::consensus::encode::serialize_hex(&tx))],
+            )
+            .expect("the cooperative key-path spend must be accepted");
+        let _: Vec<String> = rpc
+            .call("generatetoaddress", &[json!(1), json!(mining_address)])
+            .expect("mine the cooperative spend");
+
+        let spent_outpoint: serde_json::Value = rpc
+            .call("gettxout", &[json!(accepted), json!(0)])
+            .expect("gettxout");
+        assert!(
+            !spent_outpoint.is_null(),
+            "the cooperative output must be confirmed"
+        );
+        println!("cooperative key-path spend accepted in {accepted}");
     }
 }

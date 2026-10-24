@@ -230,11 +230,9 @@ impl MusigSessionCtx {
     }
 
     pub fn agg_sig(&self) -> Option<Scalar> {
-        println!("mara 0: {}", self.blame_list().len());
         if !self.blame_list().is_empty() {
             return None;
         }
-        println!("mara 1");
         let mut agg_sig = MaybeScalar::Zero;
 
         for (_, partial_sig) in self.partial_sigs.iter() {
