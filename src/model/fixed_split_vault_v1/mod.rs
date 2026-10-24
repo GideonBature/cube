@@ -25,6 +25,7 @@ pub mod amounts;
 pub mod codec;
 pub mod error;
 pub mod instance;
+pub mod manifest;
 pub mod types;
 pub mod vault;
 
@@ -32,5 +33,9 @@ pub use amounts::{split_amounts, SplitAmounts};
 pub use codec::SplitState;
 pub use error::{InvariantViolation, SplitDecodeError, SplitVaultError};
 pub use instance::{SplitDescriptor, SplitInstance};
+pub use manifest::{
+    Anchor, ManifestError, Payout, PayoutKind, ReleaseProfile, TransitionManifest,
+    MANIFEST_SCHEMA_VERSION, MAX_ANCHORS, MAX_PAYOUTS, STATEMENT_DIGEST_TAG,
+};
 pub use types::{Ledger, Phase, Role};
 pub use vault::{derive_contract_id, Auth, ConsumedOperation, Operation, SplitVault, Transition};
