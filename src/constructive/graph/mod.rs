@@ -12,10 +12,16 @@
 //!   the Engine.
 //! - `exit_request`: the `ExitRequest` role, an on-chain notice that binds a claim, a deadline and a
 //!   data-disclosure commitment.
+//! - `assertion`: the `Assert`, `Take` and `Disprove` edges. `Assert` binds the published proof
+//!   input to the claim through the beneficiary's signature over a digest that commits the
+//!   statement, table, instance, disclosure secret and input bytes; `Take` is a timelocked
+//!   operator settlement and `Disprove` is the secret-based dispute. The construction and its
+//!   remaining gap are specified in `docs/bind_01.md`.
 //!
-//! Not implemented: `Assert`, `Take` and `Disprove` (the dispute branch), which are blocked on the
-//! BitVM3 label-binding construction (`BIND-01`), and the `CooperativeSettle` edge. `GRAPH-01`
-//! therefore stays open; this module reduces it edge by edge rather than closing it.
+//! Not implemented: the `CooperativeSettle` edge. `Assert`, `Take` and `Disprove` exist as a
+//! mechanism but are not yet attached to the frozen v1 claim: a claim that carries the assertion
+//! leaf needs a recovery-package v2, which is the next step rather than a silent script change.
+//! `GRAPH-01` therefore stays open.
 //!
 //! # Authorization
 //!
@@ -43,6 +49,7 @@
 //! its own with its own review. Until such a gadget exists, a relation for this profile has to be
 //! paired with a graph whose signatures cover the statement, which is what these edges provide.
 
+pub mod assertion;
 pub mod claim_recovery;
 pub mod exit_request;
 pub mod successor_funding;

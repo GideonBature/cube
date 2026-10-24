@@ -163,7 +163,8 @@ impl VerifierKey {
 }
 
 /// Groth16 proof.
-#[derive(Debug, Clone, Copy)]
+// PATCH(cube): serializable so an assertion can publish the exact input it evaluated.
+#[derive(Debug, Clone, Copy, CanonicalSerialize, CanonicalDeserialize)]
 pub struct Input {
     pub A: bivariate::Input<Fq>,
     pub B: bivariate::Input<Fq2>,
@@ -194,7 +195,8 @@ pub struct InputMacKey {
 }
 
 /// Input MAC of the Groth16 proof.
-#[derive(Debug, Clone)]
+// PATCH(cube): serializable so a party without the input MAC key can evaluate the asserted input.
+#[derive(Debug, Clone, CanonicalSerialize, CanonicalDeserialize)]
 pub struct InputMac {
     A: bivariate::InputMac<Fq>,
     B: bivariate::InputMac<Fq2>,

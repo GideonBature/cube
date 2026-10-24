@@ -1,6 +1,10 @@
 use derive_more::Deref;
 use std::marker::PhantomData;
 
+use ark_serialize::{
+    CanonicalDeserialize, CanonicalSerialize, Compress, SerializationError, Valid, Validate,
+};
+
 use crate::mac::Mac;
 
 /// DigitMAC where the underlying BitMACs are [u8; 16] bytestrings
@@ -28,6 +32,54 @@ where
             mac,
             _marker: PhantomData,
         }
+    }
+}
+
+// PATCH(cube): the bit MACs are what an assertion publishes so a party without the input MAC key
+// can evaluate the table. `PhantomData<G>` has no arkworks encoding, so the encoding is the inner
+// vector and nothing else. The field type and its length are fixed by the proof encoding, which is
+// what makes the byte string canonical.
+impl<G, BitMac> CanonicalSerialize for DigitMac<G, BitMac>
+where
+    BitMac: Mac<bool> + CanonicalSerialize,
+{
+    fn serialize_with_mode<W: std::io::Write>(
+        &self,
+        writer: W,
+        compress: Compress,
+    ) -> Result<(), SerializationError> {
+        self.mac.serialize_with_mode(writer, compress)
+    }
+
+    fn serialized_size(&self, compress: Compress) -> usize {
+        self.mac.serialized_size(compress)
+    }
+}
+
+impl<G, BitMac> Valid for DigitMac<G, BitMac>
+where
+    G: Sync,
+    BitMac: Mac<bool> + Valid,
+{
+    fn check(&self) -> Result<(), SerializationError> {
+        self.mac.check()
+    }
+}
+
+impl<G, BitMac> CanonicalDeserialize for DigitMac<G, BitMac>
+where
+    G: Sync,
+    BitMac: Mac<bool> + CanonicalDeserialize,
+{
+    fn deserialize_with_mode<R: std::io::Read>(
+        reader: R,
+        compress: Compress,
+        validate: Validate,
+    ) -> Result<Self, SerializationError> {
+        Ok(Self {
+            mac: Vec::<BitMac>::deserialize_with_mode(reader, compress, validate)?,
+            _marker: PhantomData,
+        })
     }
 }
 

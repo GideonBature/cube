@@ -39,6 +39,23 @@ corrected.
 an implicit workspace member, pulling 7.8k lines of upstream code into `cargo fmt --all` and
 `clippy --all-targets -- -D warnings`. The Cube workspace also lists this path in `exclude`.
 
+## 3. Authenticated inputs are serializable
+
+**Files:** `src/mac/digit/mod.rs`, `src/garble/bivariate.rs`,
+`src/garble/groth16_verifier/mod.rs`
+
+**Why:** an assertion has to publish the exact proof input and its MAC so a party that does not hold
+the input MAC key can evaluate the table. Upstream's `Input` and `InputMac` can be built and printed
+but not encoded, so that publication was impossible.
+
+**Patch:** manual `CanonicalSerialize` / `Valid` / `CanonicalDeserialize` for `DigitMac` (its
+`PhantomData<G>` has no arkworks encoding), and derives on `bivariate::Input`, `bivariate::InputMac`
+and the Groth16 `Input` / `InputMac`. The bivariate types carry `F: Field` bounds because the derive
+needs the field's own encoding and `Sync`; every use is already a field.
+
+**Validation:** `crates/cube-argo/tests/garbling.rs` publishes the pair, decodes it, evaluates it
+without the key, rejects trailing bytes and records the measured 36,928-byte encoding.
+
 ## Not patched, recorded instead
 
 - **`garble_groth16` takes a `u64` seed.** The whole garbling is seeded from 64 bits, which is an
@@ -47,7 +64,11 @@ an implicit workspace member, pulling 7.8k lines of upstream code into `cargo fm
 - **`Table::evaluate` discards the input-validity disclosure value.** It calls
   `input_validity::evaluate(..)?` and drops the returned `Fq`, so a malformed input that should
   disclose evidence does not contribute any. Changing that would change the cryptographic contract,
-  so it is recorded as an open defect rather than patched here.
+  so it is recorded as an open defect rather than patched here. A related measured case: an input
+  carrying a MAC made for a different input fails an AES decode inside a sub-table, so evaluation
+  returns `DecryptionError` before the conditional reveal and carries no secret. `cube-argo` maps
+  that to `EvaluationFailed`; `docs/bind_01.md` section 2 explains why the assertion therefore also
+  requires the setup holder's signature over the published input digest.
 - **`.cargo/config.toml` target `rustflags`.** The vendored build is invoked from the Cube workspace,
   so these per-target `aes_armv8` cfgs are not applied. The portable AES path is used unless the
   workspace sets the cfg itself.

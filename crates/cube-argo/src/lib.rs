@@ -49,7 +49,8 @@ mod public_input;
 
 pub use convert::{Groth16Proof, Groth16VerifyingKey};
 pub use garbling::{
-    GarbledVerifier, SetupInstanceId, VerifierOutcome, RECOMMENDED_SETUP_STACK_BYTES,
+    disclosure_secret_commitment, AuthenticatedInput, GarbledVerifier, SetupInstanceId,
+    VerifierOutcome, AUTHENTICATED_INPUT_TAG, GARBLING_TABLE_TAG, RECOMMENDED_SETUP_STACK_BYTES,
 };
 pub use public_input::statement_public_input;
 
@@ -97,6 +98,13 @@ pub enum ArgoAdapterError {
     EvaluationFailed,
     /// The table could not be serialized for measurement.
     SerializationFailed,
+    /// A proof component is the point at infinity and has no bivariate encoding.
+    ///
+    /// Argo encodes a group element as its affine coordinates, so there is nothing to evaluate and
+    /// nothing to publish. The input is rejected before the table is touched.
+    DegenerateProofComponent,
+    /// The published authenticated-input bytes are malformed, truncated or non-canonical.
+    InvalidAuthenticatedInput,
     /// The disclosure secret bytes did not decode to a field element.
     InvalidDisclosureSecretBytes,
     /// The statement digest is not below the scalar-field modulus.

@@ -168,6 +168,14 @@ For the exit-ladder/Connector design, enumerate what transaction linkage proves 
 **Artifacts:** raw/PSBT transaction fixtures, descriptor manifest, signing transcript rules, threat analysis, hashlock/label adapter design, maturity/conflict tests and recovery map for every entitlement.  
 **Done when:** Bitcoin Core accepts the intended paths and rejects premature/unauthorized/conflicting ones; Alice, Bob and Carol each retain the specified recovery rights. An isolated collateral hashlock with no effect on the wrong payout fails this gate.
 
+**Status (24 October 2026):** the participant-scoped binding is implemented in
+`src/constructive/graph/assertion.rs` and specified in `docs/bind_01.md`. It adds `AuthenticatedInput`
+to `cube-argo`, the claim assertion leaf, the `Assert` transaction, `Take` and `Disprove`, with
+offline byte tests and a regtest run that rejects a premature take, a wrong signer, a missing
+signature and a wrong secret, and accepts the honest paths. BIND-01 remains open for a unilateral
+operator: Argo's MAC interface supplies no public input-label opening, so the assertion input is
+signed by the participant whose value is at stake.
+
 ## 6. Work package P2: reference contract model and canonical schema
 
 **Depends on:** P0.  

@@ -156,8 +156,9 @@ impl<F: Field> Poly<F> {
 }
 
 /// Bivariate input (x, y)
-#[derive(Debug, Clone, Copy)]
-pub struct Input<F> {
+// PATCH(cube): serializable so an assertion can publish the exact input it evaluated.
+#[derive(Debug, Clone, Copy, CanonicalSerialize, CanonicalDeserialize)]
+pub struct Input<F: Field> {
     pub(crate) x: F,
     pub(crate) y: F,
 }
@@ -186,8 +187,9 @@ where
     }
 }
 
-#[derive(Debug, Clone, PartialEq)]
-pub struct InputMac<F> {
+// PATCH(cube): serializable so an assertion can publish the MAC that authenticates the input.
+#[derive(Debug, Clone, PartialEq, CanonicalSerialize, CanonicalDeserialize)]
+pub struct InputMac<F: Field> {
     pub(crate) x: bytes::DigitMac<F>,
     pub(crate) y: bytes::DigitMac<F>,
 }
