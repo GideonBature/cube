@@ -30,9 +30,10 @@ mod liftv2_regtest_tests {
     };
     use bitcoincore_rpc::{Auth, Client, RpcApi};
     use cube::constructive::contracts::fixed_split_vault_v1::claim::{
-        claim_control_block, claim_script, claim_scriptpubkey, parse_claim_script,
-        parse_statement_op_return_script, statement_op_return_script,
+        claim_scriptpubkey, parse_claim_script, parse_statement_op_return_script,
+        statement_op_return_script,
     };
+    use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
     use cube::constructive::taproot::TapRoot;
     use cube::constructive::txo::lift::lift_versions::liftv2::liftv2::return_liftv2_taproot;
     use cube::model::fixed_split_vault_v1::manifest::{
@@ -727,28 +728,30 @@ mod liftv2_regtest_tests {
         .serialize()
     }
 
-    /// Signs a tapscript `OP_CHECKSIG` spend of a claim output.
-    fn sign_claim_spend(
-        statement_digest: [u8; 32],
-        beneficiary_key: [u8; 32],
+    /// Signs a claim spend using only the bytes carried by a recovery package.
+    ///
+    /// This is the recovery path a fresh client takes: it never re-derives the script or control
+    /// block from the statement, it uses what the package carries. The only thing it must supply
+    /// from outside is the beneficiary secret key.
+    fn sign_claim_spend_from_package(
+        package: &ClaimRecoveryPackage,
         beneficiary_secret: [u8; 32],
-        funding_outpoint: OutPoint,
         prevout: &TxOut,
         output_value: u64,
         output_spk: ScriptBuf,
     ) -> Transaction {
-        let script = claim_script(statement_digest, beneficiary_key);
-        let control_block =
-            claim_control_block(statement_digest, beneficiary_key).expect("claim control block");
-        let leaf_hash = bitcoin::taproot::TapLeafHash::from_byte_array(
-            cube::constructive::taproot::hash_tap_leaf(&script, 0xc0),
-        );
+        let claim_outpoint = package
+            .claim_outpoint
+            .expect("a recoverable package must carry its outpoint");
 
         let mut tx = Transaction {
             version: bitcoin::transaction::Version::TWO,
             lock_time: LockTime::ZERO,
             input: vec![TxIn {
-                previous_output: funding_outpoint,
+                previous_output: OutPoint {
+                    txid: bitcoin::Txid::from_byte_array(claim_outpoint.txid),
+                    vout: claim_outpoint.vout,
+                },
                 script_sig: ScriptBuf::new(),
                 sequence: Sequence::ENABLE_RBF_NO_LOCKTIME,
                 witness: Witness::new(),
@@ -758,6 +761,10 @@ mod liftv2_regtest_tests {
                 script_pubkey: output_spk,
             }],
         };
+
+        let leaf_hash = bitcoin::taproot::TapLeafHash::from_byte_array(
+            cube::constructive::taproot::hash_tap_leaf(&package.claim_script, 0xc0),
+        );
 
         let secp = Secp256k1::new();
         let sighash = SighashCache::new(&tx)
@@ -778,8 +785,11 @@ mod liftv2_regtest_tests {
         secp.verify_schnorr(&signature, &message, &keypair.x_only_public_key().0)
             .expect("the claim signature must verify locally");
 
-        tx.input[0].witness =
-            Witness::from_slice(&[signature.serialize().to_vec(), script, control_block]);
+        tx.input[0].witness = Witness::from_slice(&[
+            signature.serialize().to_vec(),
+            package.claim_script.clone(),
+            package.control_block.clone(),
+        ]);
         tx
     }
 
@@ -1028,17 +1038,46 @@ mod liftv2_regtest_tests {
             "the on-chain commitment must be the statement digest"
         );
 
-        // 9 Carol must not be able to spend Bob's claim output.
+        // 9 Build Bob's recovery package, then forget everything except its bytes.
+        //
+        // From here on the test uses only what the package carries: no statement digest, no
+        // template call, no derived script. This is the shape of recovery after the Engine and the
+        // original client are gone.
         let bob_claim_prevout = successor.output[0].clone();
-        let bob_claim_outpoint = OutPoint {
-            txid: successor.compute_txid(),
-            vout: 0,
-        };
-        let carol_spend = sign_claim_spend(
-            statement_digest,
+        let bob_package = ClaimRecoveryPackage::new(
+            ReleaseProfile::ArgoSplitRegtest,
+            [0x71; 32],
+            None,
             bob_key,
+            manifest.template_hash,
+            manifest.circuit_id,
+            statement_digest,
+            amounts.bob_sats,
+            Some(Anchor::new(successor.compute_txid().to_byte_array(), 0)),
+            432,
+            10,
+            manifest.setup_instance_id,
+            manifest.challenge_config_digest,
+        )
+        .expect("Bob's package must construct");
+        bob_package.validate().expect("Bob's package must be valid");
+
+        // 9.a Transport it as bytes and decode, so recovery starts from the artifact and not from
+        //     the values that happened to be in scope.
+        let bob_package =
+            ClaimRecoveryPackage::decode(&bob_package.encode()).expect("package round trip");
+        assert_eq!(
+            bob_package.claim_scriptpubkey().expect("spk"),
+            bob_claim_prevout.script_pubkey.as_bytes(),
+            "the package must recover the output that was actually funded"
+        );
+        assert!(bob_package.is_recoverable());
+
+        // 9.b Carol signs with her own key against Bob's package; the script names Bob, so this
+        //     must not be accepted.
+        let carol_spend = sign_claim_spend_from_package(
+            &bob_package,
             CAROL_SECRET,
-            bob_claim_outpoint,
             &bob_claim_prevout,
             bob_claim_prevout.value.to_sat() - 1_000,
             address_to_script(
@@ -1060,11 +1099,9 @@ mod liftv2_regtest_tests {
         );
 
         // 10 Bob spends his claim output, revealing the committed statement in the witness.
-        let bob_spend = sign_claim_spend(
-            statement_digest,
-            bob_key,
+        let bob_spend = sign_claim_spend_from_package(
+            &bob_package,
             BOB_SECRET,
-            bob_claim_outpoint,
             &bob_claim_prevout,
             bob_claim_prevout.value.to_sat() - 1_000,
             address_to_script(&rpc.call::<String>("getnewaddress", &[]).expect("bob dest")),
