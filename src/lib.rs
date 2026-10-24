@@ -14,6 +14,10 @@ pub mod executive;
 #[path = "inscriptive/mod.rs"]
 pub mod inscriptive;
 
+// Model
+#[path = "model/mod.rs"]
+pub mod model;
+
 // Operative
 #[path = "operative/mod.rs"]
 pub mod operative;
