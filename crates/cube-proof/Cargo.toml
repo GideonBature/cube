@@ -1,0 +1,21 @@
+[package]
+name = "cube-proof"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+# arkworks 0.5: the same tree Argo and the vendored verifier use, so a verifying key can be
+# converted into Argo's equation without a second curve/field representation.
+ark-bn254 = "0.5.0"
+ark-crypto-primitives = { version = "0.5.0", features = ["crh", "r1cs"] }
+ark-ff = "0.5.0"
+ark-r1cs-std = "0.5.0"
+ark-relations = "0.5.0"
+ark-std = { version = "0.5.0", features = ["getrandom"] }
+sha2 = "0.10"
+
+[dev-dependencies]
+# The model is the source of truth for the manifest encoding. It is a dev-dependency only: the
+# circuit takes bytes, so the proving stack does not link the application.
+cube = { path = "../.." }
