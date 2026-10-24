@@ -184,7 +184,7 @@ This draft proposes `cube-v1-fixed-v0` as the initial test encoding, not a claim
 - Enum tags are frozen in the schema registry. Existing Entry method numbers MUST NOT be silently reused for a new wire meaning.
 - JSON is a diagnostic/interchange view, never the consensus signing or hash encoding.
 
-Use the BIP-340 tagged-SHA256 construction with distinct ASCII tags, including `CubeV1/State/v0`, `CubeV1/Entry/v0`, `CubeV1/Statement/v0`, `CubeV1/Instance/v0` and `CubeV1/Package/v0`. Serialized schema and golden vectors MUST be frozen before claiming interoperability. An APE adapter can follow, but must decode to exactly the same semantic objects and prove canonical round trips.
+Use the BIP-340 tagged-SHA256 construction with distinct ASCII tags, including `CubeV1/State/v0`, `CubeV1/Entry/v0`, `CubeV1/Statement/v1`, `CubeV1/Instance/v0` and `CubeV1/Package/v0`. Serialized schema and golden vectors MUST be frozen before claiming interoperability. An APE adapter can follow, but must decode to exactly the same semantic objects and prove canonical round trips.
 
 ### 5.3 Entry authorization
 
@@ -237,6 +237,18 @@ The inspected Argo verifier exposes one scalar `x`. A candidate pilot adapter co
 This mapping is a compression commitment, not an injective encoding of 256 bits. Its binding/security level, byte order and range implementation MUST be assessed as part of CRYPTO-01. Do not claim a lossless 256-bit public input or a blanket 128-bit end-to-end guarantee. A reviewed alternative or an explicit multi-public-input extension can replace it only under a new circuit/backend version and matching vectors.
 
 Most importantly, public `x` and its authenticated labels MUST be bound to the Bitcoin assertion's authorized manifest/obligations. Checking `x` in a cooperative wallet alone is not sufficient if a malicious Engine can publish another valid proof/context on the unilateral path. This exact binding is an unresolved transaction-adapter acceptance requirement, not functionality furnished by Argo automatically.
+
+#### Amendment A1: field-sized statement digest (`CubeV1/Statement/v1`)
+
+Assessment recorded for CRYPTO-01's public-input item. The proposal above reduces a 256-bit digest modulo `r`. That reduction is not injective: `r > 2^253.99`, so roughly four digests share each scalar, and a prover could satisfy the same `x` with a statement other than the one the Bitcoin output commits to. Grinding the digest below `r` would need a free nonce field that the frozen 665-byte manifest encoding does not contain.
+
+The selected construction therefore truncates at the source: `D = TaggedHash("CubeV1/Statement/v1", encode(manifest))` with the three most significant bits cleared, so `OS2IP_BE(D) < 2^253 < r`, `x = OS2IP_BE(D)` without reduction, and the mapping is injective on every digest the statement can produce. Three bits of a 256-bit hash output are dropped when the statement is defined, so collision resistance stays above 126 bits, and no field, width or offset changes.
+
+Consequences that bind implementations:
+
+- A consumer recomputes `D` with the same masking and **refuses** a digest at or above `r`. Reduction is a rejection, not a normalization.
+- Golden vectors, claim scripts and recovery packages carry the truncated bytes. The frozen v1 digest of the `tests/transition_manifest.rs` fixture is `0a88fc1a41daa9ff336cae4262b9d0c7d06d7ad4ae1bf1e7e2c17b843e011596`.
+- The circuit still MUST recompute the digest from the constrained manifest, so `x` cannot be detached from the witness. That remains open P4 work; A1 removes only the lossiness of the scalar mapping.
 
 ### 7.3 Required relation
 

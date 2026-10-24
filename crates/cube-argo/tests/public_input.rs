@@ -1,12 +1,12 @@
 //! Tests for the statement-digest projection.
 //!
-//! These pin the two things a later circuit cannot renegotiate: byte order and range handling. They
-//! also demonstrate the loss, because a test that only showed agreement on small values would hide
-//! exactly why CRYPTO-01 stays open.
+//! These pin the two things a later circuit cannot renegotiate: byte order and injectivity. The
+//! injection tests are also the reason the statement digest is field-sized — a reduced digest would
+//! have several preimages per scalar, so the projection refuses it instead.
 
 use ark_bn254::Fr;
 use ark_ff::{BigInteger, Field, PrimeField};
-use cube_argo::statement_public_input;
+use cube_argo::{statement_public_input, ArgoAdapterError};
 
 /// Returns the BN254 scalar-field modulus as a 32-byte big-endian digest.
 fn modulus_digest() -> [u8; 32] {
@@ -45,57 +45,73 @@ fn decrement_be(digest: &mut [u8; 32]) {
 #[test]
 fn projection_is_big_endian() {
     // 1 Zero maps to zero.
-    assert_eq!(statement_public_input([0u8; 32]), Fr::from(0u64));
+    assert_eq!(
+        statement_public_input([0u8; 32]).expect("zero is field-sized"),
+        Fr::from(0u64)
+    );
 
     // 2 The last byte is the least significant one.
     let mut one = [0u8; 32];
     one[31] = 1;
-    assert_eq!(statement_public_input(one), Fr::from(1u64));
+    assert_eq!(
+        statement_public_input(one).expect("one is field-sized"),
+        Fr::from(1u64)
+    );
 
     // 3 The first byte is the most significant one.
     let mut high = [0u8; 32];
     high[0] = 1;
-    assert_eq!(statement_public_input(high), Fr::from(2u64).pow([248u64]));
-
-    // 4 Reversing the bytes changes the scalar. If the adapter used little-endian, cases 2 and 3
-    //   would swap and this assertion would still pass; 3 is what pins the direction.
-    let mut reversed = one;
-    reversed.reverse();
-    assert_ne!(
-        statement_public_input(reversed),
-        statement_public_input(one)
+    assert_eq!(
+        statement_public_input(high).expect("2^248 is field-sized"),
+        Fr::from(2u64).pow([248u64])
     );
 }
 
 #[test]
-fn projection_reduces_the_modulus_and_leaves_smaller_values_alone() {
+fn projection_refuses_anything_the_conversion_would_reduce() {
+    // 1 The modulus itself would reduce to zero.
     let modulus = modulus_digest();
+    assert_eq!(
+        statement_public_input(modulus),
+        Err(ArgoAdapterError::StatementDigestNotBelowModulus { digest: modulus })
+    );
 
-    // 1 The modulus itself maps to zero: reduction applies to the whole 256-bit integer.
-    assert_eq!(statement_public_input(modulus), Fr::from(0u64));
-
-    // 2 Just above the modulus wraps to one, not to some larger or truncated value.
+    // 2 Just above the modulus would reduce to one.
     let mut above = modulus;
     increment_be(&mut above);
-    assert_eq!(statement_public_input(above), Fr::from(1u64));
+    assert_eq!(
+        statement_public_input(above),
+        Err(ArgoAdapterError::StatementDigestNotBelowModulus { digest: above })
+    );
 
-    // 3 Just below the modulus must survive unchanged. Over-reducing would turn it into zero.
-    let mut below = modulus;
-    decrement_be(&mut below);
-    assert_eq!(statement_public_input(below), -Fr::from(1u64));
+    // 3 An unmasked 32-byte value is not a `CubeV1/Statement/v1` digest at all.
+    let unmasked = [0xffu8; 32];
+    assert_eq!(
+        statement_public_input(unmasked),
+        Err(ArgoAdapterError::StatementDigestNotBelowModulus { digest: unmasked })
+    );
 }
 
 #[test]
-fn projection_is_not_injective() {
-    // Two different 32-byte digests, one scalar. This is why the scalar alone cannot bind a
-    // manifest: a proof for one statement would satisfy the other's public input.
-    let zero = [0u8; 32];
-    let modulus = modulus_digest();
-
-    assert_ne!(zero, modulus, "the two digests must actually differ");
+fn projection_accepts_the_largest_field_sized_value_and_stays_injective() {
+    // 1 `r - 1` is accepted and maps to `-1`, not to something smaller: no reduction happened.
+    let mut below = modulus_digest();
+    decrement_be(&mut below);
     assert_eq!(
-        statement_public_input(zero),
-        statement_public_input(modulus),
-        "the collision must be visible to the test, not assumed"
+        statement_public_input(below).expect("r - 1 is field-sized"),
+        -Fr::from(1u64)
     );
+
+    // 2 The pair that collided under the old reduction: zero and the modulus. Zero is accepted, the
+    //   modulus is refused, so the collision cannot be constructed.
+    assert_eq!(
+        statement_public_input([0u8; 32]).expect("zero is field-sized"),
+        Fr::from(0u64)
+    );
+    assert!(statement_public_input(modulus_digest()).is_err());
+
+    // 3 Every digest the statement definition can produce (top three bits cleared) is accepted.
+    let mut masked = [0xffu8; 32];
+    masked[0] &= 0x1f;
+    assert!(statement_public_input(masked).is_ok());
 }

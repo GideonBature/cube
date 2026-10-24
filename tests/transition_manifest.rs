@@ -388,17 +388,21 @@ mod transition_manifest_tests {
         println!("manifest_bytes_len = {}", fixture().encode().len());
     }
 
-    /// The frozen `CubeV1/Statement/v0` vector.
+    /// The frozen `CubeV1/Statement/v1` vector.
     ///
-    /// Changing any field order, width, tag or bound breaks this test on purpose. A second
-    /// implementation must reproduce this digest byte for byte before any interoperability claim
-    /// is made, and a Bitcoin output that commits to a different digest is a different claim.
+    /// Changing any field order, width, tag, bound or the field-sizing mask breaks this test on
+    /// purpose. A second implementation must reproduce this digest byte for byte before any
+    /// interoperability claim is made, and a Bitcoin output that commits to a different digest is a
+    /// different claim.
     #[test]
     fn golden_statement_digest_is_frozen() {
         assert_eq!(
             hex::encode(fixture().statement_digest()),
-            "4a7f0624c1a7ecc85e607c00545b998265eabae22fcf3111e4db0c2243acaa32"
+            "0a88fc1a41daa9ff336cae4262b9d0c7d06d7ad4ae1bf1e7e2c17b843e011596"
         );
+
+        // The digest is field-sized: its most significant byte carries no bits above `0x1f`.
+        assert_eq!(fixture().statement_digest()[0] & 0xe0, 0x00);
 
         // Field-by-field: 2 header bytes, 128 context keys, 64 state digests, 8 batch sequence,
         // 1 anchor count, 2 anchors of 36, 32 entry digest, 32 caller key, 8 caller sequence,
@@ -488,7 +492,7 @@ mod transition_manifest_tests {
         assert_eq!(derived, fixture());
         assert_eq!(
             hex::encode(derived.statement_digest()),
-            "4a7f0624c1a7ecc85e607c00545b998265eabae22fcf3111e4db0c2243acaa32"
+            "0a88fc1a41daa9ff336cae4262b9d0c7d06d7ad4ae1bf1e7e2c17b843e011596"
         );
     }
 

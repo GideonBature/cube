@@ -39,8 +39,8 @@
 //! - [`GarblingConfig`]: the entropy and disclosure-secret preconditions for setup.
 //! - [`GarbledVerifier`]: setup and evaluation of Argo's table, with a three-way outcome instead of
 //!   a boolean.
-//! - [`statement_public_input`]: the proposed projection of a 32-byte statement digest onto Argo's
-//!   single public scalar, with its loss stated rather than assumed.
+//! - [`statement_public_input`]: the projection of a field-sized statement digest onto Argo's single
+//!   public scalar, which refuses anything that would be reduced.
 //! - [`VerifierKeyIdentity`]: the stable identity of a verifier key, used to bind tables to keys.
 
 mod convert;
@@ -99,6 +99,15 @@ pub enum ArgoAdapterError {
     SerializationFailed,
     /// The disclosure secret bytes did not decode to a field element.
     InvalidDisclosureSecretBytes,
+    /// The statement digest is not below the scalar-field modulus.
+    ///
+    /// The digest is field-sized by construction, so this means the caller supplied something that
+    /// is not a `CubeV1/Statement/v1` digest. It is refused rather than reduced, because reduction is
+    /// not injective and would let two statements share one public scalar.
+    StatementDigestNotBelowModulus {
+        /// The rejected digest.
+        digest: [u8; 32],
+    },
 }
 
 /// A stable identity for one Groth16 verifying key, derived from its canonical bytes.

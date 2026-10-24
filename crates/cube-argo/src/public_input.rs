@@ -1,52 +1,67 @@
-//! Derivation of Argo's single public scalar from a statement digest.
+//! Projection of a statement digest onto Argo's single public scalar.
 //!
-//! Argo's equation multiplies one `G1` point by one scalar, so a 32-byte statement digest has to be
-//! projected onto a scalar field element. This module owns that projection and states exactly what
-//! it does and does not guarantee.
+//! Argo's equation multiplies one `G1` point by one scalar, so a 32-byte statement digest has to
+//! become one scalar field element. This module owns that projection and refuses anything that would
+//! make it lossy.
 //!
-//! # The proposal
+//! # The rule
 //!
 //! ```text
-//! x = OS2IP_BE(D) mod r
+//! x = OS2IP_BE(D),  accepted only when D < r
 //! ```
 //!
-//! `D` is the 32-byte statement digest interpreted as a big-endian unsigned integer, `r` is the
-//! BN254 scalar-field modulus, and `x` is Argo's public scalar. Byte order is fixed: the digest's
-//! first byte is the most significant. Reversing it produces a different scalar and therefore a
-//! different statement.
+//! `D` is the statement digest as a big-endian integer and `r` is the BN254 scalar-field modulus.
+//! The digest is field-sized by construction: `CubeV1/Statement/v1` clears the top three bits, so
+//! every honest digest is below `2^253 < r`. Because the projection never reduces, it is injective on
+//! the accepted set: one scalar identifies exactly one statement.
 //!
-//! # What this costs
+//! # What went wrong with the obvious alternative
 //!
-//! `r ≈ 2^253.99`, so the map from 256-bit digests onto scalars is not injective: on average about
-//! four digests share one scalar, and a collision is easy to construct (`D` and `D + r` agree
-//! whenever both fit in 32 bytes, which holds for every `D < 2^256 - r`). Tests demonstrate the
-//! smallest instance: the all-zero digest and the modulus itself both map to zero.
+//! The earlier proposal reduced modulo `r`. That is lossy: about four 256-bit digests share each
+//! scalar, so a prover could satisfy the same public input with a different statement, and the
+//! scalar would bind nothing. The alternative of grinding the digest below `r` needs a free nonce
+//! field that the manifest encoding does not have. Truncating at the source is the only option that
+//! keeps the mapping injective without changing the manifest schema.
 //!
-//! Consequences that must not be papered over:
+//! # Consequences
 //!
-//! - The scalar alone **does not bind** a manifest. Two different statements can produce the same
-//!   `x`, so a prover for one would satisfy the other's public input.
-//! - Binding therefore has to come from elsewhere: the relation must constrain the digest (for
-//!   example by hashing the statement preimage inside the circuit), and the Bitcoin-side claim
-//!   output's committed digest remains the authoritative on-chain binding.
-//! - CRYPTO-01 stays open. This mapping is a tested proposal for byte order and range handling, not
-//!   an assessed construction.
+//! - The mapping is **not** a compression of 256 bits into a smaller field: three bits of hash
+//!   output are dropped when the statement is defined. Collision resistance stays above 126 bits.
+//! - A digest at or above `r` is refused instead of reduced. Accepting it would silently reintroduce
+//!   the collision, so the failure is loud.
+//! - The truncation lives in the statement, not here. A verifier recomputes `D` with the same rule
+//!   (`TransitionManifest::statement_digest`) and then projects it; this module never guesses.
 //!
 //! # Why it lives in the adapter
 //!
-//! The manifest stays a pure commitment: `TransitionManifest::statement_digest` deliberately does not
-//! know how a proof consumes it. Changing the adapter's mapping must not silently change the
-//! manifest, and keeping them separate makes that impossible by construction. If a multi-input
-//! verifier replaces the single scalar, this module and its tests change with it.
+//! The manifest stays a pure commitment: it does not know how a proof consumes the digest. Keeping
+//! the projection here means changing the proof interface cannot silently change a committed value.
+//! If a multi-input verifier replaces the single scalar, this module and its tests change with it.
 
+use crate::ArgoAdapterError;
 use ark_bn254::Fr;
-use ark_ff::PrimeField;
+use ark_ff::{BigInteger, PrimeField};
 
-/// Projects a 32-byte statement digest onto Argo's single public scalar.
+/// Projects a field-sized statement digest onto Argo's single public scalar.
 ///
-/// Big-endian OS2IP, then reduction modulo the BN254 scalar-field modulus. See the module
-/// documentation for what the reduction loses and why this is a proposal rather than a settled
-/// binding.
-pub fn statement_public_input(digest: [u8; 32]) -> Fr {
-    Fr::from_be_bytes_mod_order(&digest)
+/// Big-endian OS2IP with no reduction. Returns [`ArgoAdapterError::StatementDigestNotBelowModulus`]
+/// when the digest is at or above the scalar modulus, because reducing it would be lossy.
+pub fn statement_public_input(digest: [u8; 32]) -> Result<Fr, ArgoAdapterError> {
+    let scalar = Fr::from_be_bytes_mod_order(&digest);
+
+    // A digest below the modulus survives the conversion unchanged. Re-encoding is the check: if the
+    // canonical bytes differ, the conversion reduced, and the projection is not injective for this
+    // input.
+    let canonical = scalar.into_bigint().to_bytes_be();
+    let mut expected = [0u8; 32];
+    if canonical.len() > 32 {
+        return Err(ArgoAdapterError::StatementDigestNotBelowModulus { digest });
+    }
+    expected[32 - canonical.len()..].copy_from_slice(&canonical);
+
+    if expected != digest {
+        return Err(ArgoAdapterError::StatementDigestNotBelowModulus { digest });
+    }
+
+    Ok(scalar)
 }

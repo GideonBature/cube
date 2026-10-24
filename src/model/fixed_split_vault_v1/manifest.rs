@@ -3,9 +3,16 @@ use crate::transmutative::hash::{Hash, HashTag};
 
 /// The BIP-340 style tagged-hash tag of the statement commitment.
 ///
-/// Frozen: changing it changes every proof statement and every assertion a Bitcoin output commits
-/// to, so it must be versioned rather than edited.
-pub const STATEMENT_DIGEST_TAG: &str = "CubeV1/Statement/v0";
+/// Versioned because the committed value changed: `v1` truncates the digest to the scalar field so
+/// that the proof's single public scalar binds it exactly. `v0` returned the full 256-bit hash and
+/// left the public-input mapping lossy (see [`TransitionManifest::statement_digest`]).
+pub const STATEMENT_DIGEST_TAG: &str = "CubeV1/Statement/v1";
+
+/// The mask applied to the digest's most significant byte.
+///
+/// Clears three bits, so the digest is at most `2^253 - 1`, which is below the BN254 scalar-field
+/// modulus `r > 2^253.99`.
+pub const STATEMENT_DIGEST_TOP_BYTE_MASK: u8 = 0x1f;
 
 /// The schema version byte of the frozen manifest encoding.
 pub const MANIFEST_SCHEMA_VERSION: u8 = 1;
@@ -137,10 +144,11 @@ impl Anchor {
 ///
 /// - It does **not** derive itself from a `SplitVault` transition. A derivation function has to
 ///   decide how obligations and fee rules are computed, which is design work with its own review.
-/// - It does **not** implement the Argo public-input mapping `x = OS2IP_BE(D) mod r`. The adapter in
-///   `crates/cube-argo` carries that projection as a proposal with its loss measured; keeping it out
-///   of the manifest means changing the adapter cannot silently change a committed digest. CRYPTO-01
-///   stays open under either arrangement.
+/// - It does **not** implement the Argo public-input mapping. The digest it produces is field-sized
+///   (see [`Self::statement_digest`]) and the adapter in `crates/cube-argo` projects it without
+///   reduction; keeping the projection out of the manifest means changing the proof interface cannot
+///   silently change a committed value. The circuit still has to recompute the digest in-circuit, so
+///   CRYPTO-01's relation item stays open.
 /// - It does **not** include the consumed-operation set, for the same reason the state digest does
 ///   not: it is unbounded.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -408,13 +416,31 @@ impl TransitionManifest {
 
     /// Returns the commitment `D` that a proof statement and a Bitcoin assertion must bind.
     ///
-    /// This is a tagged hash over the canonical encoding, not the Argo public input. The reduction
-    /// `x = OS2IP_BE(D) mod r` is a separate, unassessed step (CRYPTO-01) and is intentionally not
-    /// implemented here.
+    /// This is a tagged hash over the canonical encoding, **truncated to the scalar field** so that
+    /// the proof's single public scalar can bind it exactly. The three most significant bits are
+    /// cleared, which makes `OS2IP_BE(D) < r` for the BN254 scalar field and therefore makes
+    /// `x = OS2IP_BE(D)` injective on the accepted set.
+    ///
+    /// # Why the digest is field-sized rather than reduced
+    ///
+    /// Argo carries exactly one scalar. Reducing a 256-bit digest modulo `r` is lossy: about four
+    /// digests share each scalar, so a prover could prove a transition for `D' != D` that satisfies
+    /// the same public input, and the scalar would bind nothing. Grinding the digest below `r`
+    /// would need a free nonce field in the manifest, which this encoding does not have. Clearing
+    /// three bits at the source keeps the mapping injective, costs three bits of a 256-bit hash
+    /// output (collision resistance stays above 126 bits) and changes no field, width or offset.
+    ///
+    /// The truncation is part of the committed value: a verifier that recomputes the digest must
+    /// apply it too, and the claim output carries the already-truncated bytes.
     pub fn statement_digest(&self) -> [u8; 32] {
-        self.encode().hash(Some(HashTag::CustomString(
+        let mut digest = self.encode().hash(Some(HashTag::CustomString(
             STATEMENT_DIGEST_TAG.to_string(),
-        )))
+        )));
+
+        // Field-sized: clear the top three bits so the big-endian integer is below the scalar
+        // modulus. `r > 2^253`, so any value below `2^253` is accepted without reduction.
+        digest[0] &= STATEMENT_DIGEST_TOP_BYTE_MASK;
+        digest
     }
 
     /// Returns the total value of all payout obligations as a wide integer.

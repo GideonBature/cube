@@ -39,8 +39,11 @@ fn garbled_verifiers_are_bound_to_their_own_keys() {
 }
 
 fn garbling_scenarios() {
-    let x = statement_public_input(DIGEST);
-    assert_ne!(x, statement_public_input(OTHER_DIGEST));
+    let x = statement_public_input(DIGEST).expect("the digest must be field-sized");
+    assert_ne!(
+        x,
+        statement_public_input(OTHER_DIGEST).expect("the digest must be field-sized")
+    );
 
     let (raw_key_a, proof_a) = common::fixture(101, x);
     let prepared_a = PreparedVerifierKey::from_groth16_verifying_key(&raw_key_a).expect("convert");
@@ -91,7 +94,7 @@ fn garbling_scenarios() {
     // 4 A different statement digest projects to a different scalar, breaks the equation and
     //   discloses the configured secret.
     let mut wrong_digest = proof_a;
-    wrong_digest.x = statement_public_input(OTHER_DIGEST);
+    wrong_digest.x = statement_public_input(OTHER_DIGEST).expect("the digest must be field-sized");
     assert!(!common::canonical_identity_holds(&raw_key_a, &wrong_digest));
     assert_eq!(
         verifier_a.evaluate(&wrong_digest).expect("evaluate"),
