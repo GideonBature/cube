@@ -8,6 +8,8 @@ publish = false
 # arkworks 0.5: the same tree Argo and the vendored verifier use, so a verifying key can be
 # converted into Argo's equation without a second curve/field representation.
 ark-bn254 = "0.5.0"
+# Setup, proving and verification. `parallel` uses every core for the multi-scalar multiplications.
+ark-groth16 = { version = "0.5.0", features = ["parallel"] }
 ark-crypto-primitives = { version = "0.5.0", features = ["crh", "r1cs"] }
 ark-ff = "0.5.0"
 ark-r1cs-std = "0.5.0"
@@ -19,3 +21,6 @@ sha2 = "0.10"
 # The model is the source of truth for the manifest encoding. It is a dev-dependency only: the
 # circuit takes bytes, so the proving stack does not link the application.
 cube = { path = "../.." }
+# The end-to-end test feeds the verifying key into the Argo adapter.
+cube-argo = { path = "../cube-argo" }
+ark-ec = "0.5.0"

@@ -4,57 +4,18 @@
 //! to the model's canonical encoding. Everything after it synthesizes constraints, so if the layout
 //! drifts the failure points at the model rather than at a magic offset.
 
+mod common;
+
 use ark_bn254::Fr;
 use ark_ff::PrimeField;
 use ark_relations::r1cs::{ConstraintSynthesizer, ConstraintSystem};
-use cube::model::fixed_split_vault_v1::manifest::{
-    Anchor, Payout, PayoutKind, ReleaseProfile, TransitionManifest, MANIFEST_SCHEMA_VERSION,
-};
 use cube_proof::fund_split::{
     statement_scalar, tagged_statement_digest, FundSplitCircuit, ANCHOR_COUNT_OFFSET,
-    KIND_BENEFICIARY_ALLOCATION, KIND_EXECUTION_FEE, MANIFEST_ENCODED_LEN, PAYOUTS_OFFSET,
-    PAYOUT_COUNT_OFFSET, PAYOUT_ENCODED_LEN, SUPPORTED_ANCHOR_COUNT, SUPPORTED_PAYOUT_COUNT,
+    KIND_BENEFICIARY_ALLOCATION, KIND_EXECUTION_FEE, MANIFEST_ENCODED_LEN, PAYOUT_COUNT_OFFSET,
+    PAYOUT_ENCODED_LEN, PAYOUTS_OFFSET, SUPPORTED_ANCHOR_COUNT, SUPPORTED_PAYOUT_COUNT,
 };
 
-const BOB_SATS: u64 = 70_000;
-const CAROL_SATS: u64 = 30_000;
-const FEE_SATS: u64 = 500;
-
-/// A one-anchor funding manifest: the shape this circuit version supports.
-fn manifest() -> TransitionManifest {
-    TransitionManifest {
-        schema_version: MANIFEST_SCHEMA_VERSION,
-        profile: ReleaseProfile::ArgoSplitRegtest,
-        network_genesis_hash: [0x11; 32],
-        template_hash: [0x22; 32],
-        circuit_id: [0x33; 32],
-        verifier_key_digest: [0x44; 32],
-        previous_state_digest: [0x55; 32],
-        resulting_state_digest: [0x66; 32],
-        batch_sequence: 1,
-        anchors: vec![Anchor::new([0x77; 32], 0)],
-        entry_digest: [0x88; 32],
-        caller_key: [0x99; 32],
-        caller_sequence: 2,
-        operation_id: [0xaa; 32],
-        payouts: vec![
-            Payout::new([0x21; 32], BOB_SATS, PayoutKind::BeneficiaryAllocation),
-            Payout::new([0x22; 32], CAROL_SATS, PayoutKind::BeneficiaryAllocation),
-            Payout::new([0x23; 32], FEE_SATS, PayoutKind::ExecutionFee),
-        ],
-        setup_instance_id: [0xbb; 32],
-        graph_template_version: 1,
-        challenge_config_digest: [0xcc; 32],
-        recovery_package_digest: [0xdd; 32],
-        batch_data_digest: [0xee; 32],
-        availability_descriptor_digest: [0xff; 32],
-    }
-}
-
-/// The canonical bytes of the fixture.
-fn manifest_bytes() -> Vec<u8> {
-    manifest().encode()
-}
+use common::{manifest, manifest_bytes, BOB_SATS, CAROL_SATS, FEE_SATS};
 
 /// Reads the amount of one payout out of the encoded bytes.
 ///
