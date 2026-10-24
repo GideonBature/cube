@@ -27,6 +27,12 @@
 //! different shape cannot slip past the fixed offsets. A statement with two anchors or a different
 //! payout count needs a different circuit id, its own verifying key and its own vectors.
 //!
+//! # Measured size
+//!
+//! 413,092 constraints for this shape in a debug build, dominated by eleven SHA-256 blocks over the
+//! 693-byte preimage. Synthesis takes roughly nine seconds in a debug build. No proof is generated
+//! yet, so this is a constraint count and not a proving measurement.
+//!
 //! # What this circuit does not prove
 //!
 //! - **State-transition validity.** Balances, caller sequences, replay protection, the contract's
