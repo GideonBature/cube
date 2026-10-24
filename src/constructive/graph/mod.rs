@@ -17,11 +17,15 @@
 //!   statement, table, instance, disclosure secret and input bytes; `Take` is a timelocked
 //!   operator settlement and `Disprove` is the secret-based dispute. The construction and its
 //!   remaining gap are specified in `docs/bind_01.md`.
+//! - `cooperative_settle`: the `CooperativeSettle` edge, which spends every beneficiary claim in one
+//!   transaction and pays each full entitlement to a destination the beneficiary signed. It keeps
+//!   the tree atomic: no beneficiary is erased while another exits.
 //!
-//! Not implemented: the `CooperativeSettle` edge. A two-leaf claim keeps its recovery branch in a
-//! v2 `ClaimRecoveryPackage` (`PACKAGE_SCHEMA_VERSION_V2`); `SuccessorFunding::new_with_assertions`
-//! can emit that shape, and `Assert`, `Take` and `Disprove` are attached to it. The v1 package
-//! continues to describe the single-leaf claim. `GRAPH-01` therefore stays open.
+//! Not implemented: nothing from the required role table is outstanding except the unilateral
+//! operator profile for `Assert` (a two-leaf claim keeps its recovery branch in a v2
+//! `ClaimRecoveryPackage`; `SuccessorFunding::new_with_assertions` can emit that shape). The v1
+//! package continues to describe the single-leaf claim. `GRAPH-01` still stays open because the
+//! complete graph has not been exercised as one composed scenario.
 //!
 //! # Authorization
 //!
@@ -52,5 +56,6 @@
 
 pub mod assertion;
 pub mod claim_recovery;
+pub mod cooperative_settle;
 pub mod exit_request;
 pub mod successor_funding;

@@ -177,8 +177,12 @@ accept the honest paths, including recovery through a v2 package. `SuccessorFund
 two-leaf claims with one binding per beneficiary; `tests/successor_v2_regtest.rs` runs that shape
 through a successor, an `Assert`, a `Disprove` and a v2 recovery on regtest. `tests/liftv2_regtest.rs`
 also creates v2 claims through the real MuSig2 deposit path and recovers Bob's claim through a v2
-package. BIND-01 remains open for a unilateral operator: Argo's MAC interface supplies no public
-input-label opening, so the assertion input is signed by the participant whose value is at stake.
+package. `CooperativeSettle` spends every beneficiary claim in one transaction to native
+destinations, with an external fee input; five offline tests and a regtest settlement of two v2
+claims exercise it, including rejection of a redirected output. BIND-01 remains open for a unilateral
+operator: Argo's MAC interface supplies no public input-label opening, so the assertion input is
+signed by the participant whose value is at stake. `GRAPH-01` stays open for the composed graph
+scenario.
 
 ## 6. Work package P2: reference contract model and canonical schema
 
