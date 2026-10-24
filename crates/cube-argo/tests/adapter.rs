@@ -4,8 +4,9 @@
 //! the process-wide verifier-key guard that works around upstream's unkeyed preprocessing cache, and
 //! the canonical byte carrier that crosses the arkworks 0.4 / 0.5 gap.
 //!
-//! Garbling itself has no test here because it needs a Groth16 verifying key from a real relation,
-//! and no relation exists yet. That dependency is deliberate and is recorded in `lib.rs`.
+//! Garbling and evaluation are covered separately: `convert.rs` checks the key projection and
+//! `garbling.rs` garbles a table and evaluates it. Both use algebraic fixtures, not a proof for a
+//! real relation, because no relation exists yet.
 
 use ark_bn254::{Fq12, G1Affine, G2Affine};
 use ark_ff::{BigInteger, PrimeField, UniformRand};

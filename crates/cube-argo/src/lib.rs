@@ -37,11 +37,17 @@
 //! - [`Groth16VerifyingKey`] and [`PreparedVerifierKey::from_groth16_verifying_key`]: the projection
 //!   of a standard Groth16 key onto that equation, including the pairing signs Argo requires.
 //! - [`GarblingConfig`]: the entropy and disclosure-secret preconditions for setup.
+//! - [`GarbledVerifier`]: setup and evaluation of Argo's table, with a three-way outcome instead of
+//!   a boolean.
 //! - [`register_verifier_key_identity`]: the process-wide guard for upstream's unkeyed cache.
 
 mod convert;
+mod garbling;
 
 pub use convert::{Groth16Proof, Groth16VerifyingKey};
+pub use garbling::{
+    GarbledVerifier, SetupInstanceId, VerifierOutcome, RECOMMENDED_SETUP_STACK_BYTES,
+};
 
 use argo::garble::groth16_verifier::VerifierKey;
 use ark_bn254::{Fq, Fq12, G1Affine, G2Affine};
@@ -88,6 +94,16 @@ pub enum ArgoAdapterError {
     DegenerateVerifierKey,
     /// The converted verifier key could not be encoded into canonical bytes.
     VerifierKeyEncoding,
+    /// Argo refused to garble the table.
+    GarblingFailed,
+    /// Argo refused to evaluate the table on the supplied input.
+    ///
+    /// Upstream propagates malformed-input failures as errors and discards the disclosure value it
+    /// computed on the way, so such a failure carries no evidence. That defect is upstream's, not
+    /// this adapter's; see the module documentation.
+    EvaluationFailed,
+    /// The table could not be serialized for measurement.
+    SerializationFailed,
     /// The disclosure secret bytes did not decode to a field element.
     InvalidDisclosureSecretBytes,
     /// No verifier key was registered before use.
