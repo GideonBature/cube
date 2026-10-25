@@ -3,6 +3,7 @@
 #
 #   ./scripts/regtest.sh up      start the node and print the environment
 #   ./scripts/regtest.sh test    run every node-backed test (node must be up)
+#   ./scripts/regtest.sh cli     run every cube-cli scenario on a fresh chain
 #   ./scripts/regtest.sh down    stop the node and remove its volume
 #   ./scripts/regtest.sh all     start, test, stop (KEEP=1 leaves the node running)
 #
@@ -72,6 +73,23 @@ run_tests() {
   run_test_file cargo test --release --test proof_take_regtest -- --ignored --nocapture
 }
 
+# Runs the cube-cli scenarios on one fresh chain. The refund scenario mines ~13,000 blocks, which
+# exhausts the regtest subsidy, so it runs last.
+run_cli_scenarios() {
+  if ! docker info >/dev/null 2>&1; then
+    echo "Docker daemon is not running; start Docker Desktop or another daemon first." >&2
+    exit 1
+  fi
+  cd "$root"
+  start
+  show_env
+
+  cargo run -q -p cube-cli -- --state target/cube-cli-cooperative.json scenario run liftv2-cooperative
+  cargo run -q -p cube-cli -- --state target/cube-cli-dispute.json scenario run liftv2-dispute
+  cargo run -q -p cube-cli -- --state target/cube-cli-proof.json scenario run proof-take --challenge-blocks 10
+  cargo run -q -p cube-cli -- --state target/cube-cli-refund.json scenario run liftv2-refund
+}
+
 case "${1:-all}" in
   up)
     start
@@ -79,6 +97,15 @@ case "${1:-all}" in
     ;;
   down)
     stop
+    ;;
+  cli)
+    if [[ "${KEEP:-0}" != "1" ]]; then
+      trap 'stop' EXIT
+    fi
+    run_cli_scenarios
+    if [[ "${KEEP:-0}" == "1" ]]; then
+      echo "KEEP=1: leaving the node running"
+    fi
     ;;
   test|all)
     if [[ "${KEEP:-0}" != "1" ]]; then
@@ -91,7 +118,7 @@ case "${1:-all}" in
     fi
     ;;
   *)
-    echo "usage: $0 {up|test|down|all}" >&2
+    echo "usage: $0 {up|test|cli|down|all}" >&2
     exit 2
     ;;
 esac

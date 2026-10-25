@@ -1,5 +1,5 @@
 [workspace]
-members = ["crates/cube-argo", "crates/cube-proof"]
+members = ["crates/cube-argo", "crates/cube-proof", "crates/cube-scenario", "crates/cube-cli"]
 # `vendor/argo` is a pinned, locally patched copy of upstream Argo. It is a path dependency, not a
 # member: keeping it out of the workspace keeps upstream code out of `cargo fmt --all` and clippy.
 exclude = ["vendor/argo"]

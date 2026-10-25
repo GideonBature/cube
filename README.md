@@ -54,6 +54,38 @@ cargo run <resource-mode> <chain> <kind> <rpc-url> <rpc-user> <rpc-password> <sy
 cargo run pruned signet node http://127.0.0.1:38332 user password true
 ```
 
+## Regtest scenarios (`cube-cli`)
+
+`cube-cli` drives the ownership graph against a Bitcoin Core regtest node and prints one JSON
+artifact per command. Every command is one step over a state file (`--state`, `cube-state.json` by
+default), so shell scripts can inspect, resume or replay a flow:
+
+```sh
+./scripts/regtest.sh up
+export CUBE_REGTEST_RPC_URL=http://127.0.0.1:18443 \
+       CUBE_REGTEST_RPC_USER=cube CUBE_REGTEST_RPC_PASSWORD=cube
+
+cargo run -p cube-cli -- keys
+cargo run -p cube-cli -- deposit fund --sats 500000
+cargo run -p cube-cli -- transition build
+cargo run -p cube-cli -- successor publish
+cargo run -p cube-cli -- claim list
+cargo run -p cube-cli -- claim recover 0
+```
+
+The composed scenarios match the node-backed integration tests:
+
+```sh
+cargo run -p cube-cli -- scenario list
+cargo run -p cube-cli -- scenario run liftv2-cooperative
+cargo run -p cube-cli -- scenario run liftv2-dispute
+cargo run -p cube-cli -- scenario run proof-take
+cargo run -p cube-cli -- scenario run liftv2-refund   # mines ~13,000 blocks
+```
+
+`./scripts/regtest.sh cli` starts a fresh node and runs every scenario. All keys are public test
+fixtures and the CLI is regtest-only.
+
 ## License
 
 This project is licensed under the CC0 1.0 Universal License. See the `LICENSE` file for details.

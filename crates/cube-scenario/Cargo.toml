@@ -1,0 +1,17 @@
+[package]
+name = "cube-scenario"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[dependencies]
+anyhow = "1"
+bitcoin = "0.32.5"
+bitcoincore-rpc = "0.19.0"
+cube = { path = "../.." }
+hex = "0.4.3"
+# The same MuSig2 primitives the repository's LiftV2 graph uses, so the CLI signs the deposit key
+# path with the implementation under test rather than a second one.
+secp = { version = "0.4.1", default-features = false, features = ["k256"] }
+serde = { version = "1.0.216", features = ["derive"] }
+serde_json = "1.0.134"

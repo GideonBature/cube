@@ -3,6 +3,10 @@
 .DS_Store
 nns_ip_address.txt
 
+# cube-cli artifacts (the default --state path)
+/cube-state.json
+/cube-state.json.tmp
+
 # Editor and IDE files
 *.orig
 *.bak
