@@ -1,23 +1,29 @@
 //! Deriving a transition and its claim bindings from a funded deposit.
 //!
-//! The manifest is **not** hand-written. It is produced by the repository's reference model
-//! (`SplitVault`) and then derived by `derive_manifest` from the parent state, the accepted
-//! `FundSplit` transition and the resulting state. That means the amounts, the caller sequence and
-//! the state digests in the artifact are the ones the model actually committed, not values a
-//! scenario author typed.
+//! Two paths produce the manifest:
+//!
+//! - [`derive`] runs the reference model (`SplitVault`). This is the path the step-by-step CLI uses;
+//!   it is deterministic and needs no Engine.
+//! - [`from_vm`] takes a [`VmExecution`] produced by the real CubeVM template and derives the
+//!   manifest from the state the VM actually reached, after checking it against the model. This is
+//!   the composed path: the value-bearing fields come from the Engine, and the model is the
+//!   differential guard rather than the source.
+//!
+//! In both paths the manifest itself is produced by `derive_manifest`, never hand-written.
 //!
 //! Everything outside the model — the network genesis hash, the template hash, the setup instance,
 //! the challenge configuration, the availability commitments — is explicitly fixture context. The
-//! function derives those deterministically from the deposit outpoint so that two runs against the
-//! same deposit produce the same manifest, and documents each one at the point it is chosen.
+//! functions derive those deterministically from the deposit outpoint so that two runs against the
+//! same deposit produce the same manifest.
 //!
 //! The two assertion terms are the scenario's off-chain obligations: a claim id, the setup
 //! instance, the verifier-key identity, the table digest, the disclosure commitment, the
 //! authenticated input digest and the challenge window. The CLI uses fixture digests for the
 //! proof-side values; `--input-digest`, `--table-digest` and `--verifier-key-identity` let a caller
-//! substitute the values an actual prover and Arbo table produced.
+//! substitute the values an actual prover and Argo table produced.
 
 use crate::artifact::{ClaimBinding, Deposit, Hex, Transition};
+use crate::engine::VmExecution;
 use crate::keys;
 use crate::DebugContext;
 use anyhow::{bail, Context, Result};
@@ -25,10 +31,12 @@ use bitcoin::hashes::Hash as _;
 use bitcoin::Network;
 use cube::constructive::contracts::fixed_split_vault_v1::template_hash;
 use cube::constructive::graph::assertion::{disclosure_secret_commitment, AssertionTerms};
-use cube::model::fixed_split_vault_v1::manifest::{Anchor, PayoutKind, ReleaseProfile};
+use cube::model::fixed_split_vault_v1::manifest::{
+    Anchor, PayoutKind, ReleaseProfile, TransitionManifest,
+};
 use cube::model::fixed_split_vault_v1::{
-    derive_manifest, Auth, Ledger, ManifestContext, Operation, Role, SplitDescriptor, SplitVault,
-    Transition as ModelTransition,
+    derive_manifest, Auth, Ledger, ManifestContext, Operation, Phase, Role, SplitDescriptor,
+    SplitState, SplitVault, Transition as ModelTransition,
 };
 use cube::transmutative::hash::{Hash, HashTag};
 
@@ -85,30 +93,24 @@ fn network_genesis() -> [u8; 32] {
         .to_byte_array()
 }
 
-/// Derives the transition for a funded deposit.
-pub fn derive(deposit: &Deposit, options: &TransitionOptions) -> Result<Transition> {
-    // 1 The deposit must fund the successor's obligations and its miner fee.
-    if options.network_fee_reserve_sats == 0 {
-        bail!("the successor must leave a positive miner fee");
-    }
-    let gross_sats = deposit
-        .value_sats
-        .checked_sub(options.network_fee_reserve_sats)
-        .context("the network fee reserve exceeds the deposit")?;
-
-    // 2 Run the reference model: instantiate, fund, and keep the accepted transition.
-    let descriptor = SplitDescriptor::new(
+/// The immutable descriptor every fixture path uses.
+fn descriptor() -> SplitDescriptor {
+    SplitDescriptor::new(
         network_genesis(),
         template_hash(),
         keys::xonly(keys::ALICE_SECRET),
         keys::xonly(keys::BOB_SECRET),
         keys::xonly(keys::CAROL_SECRET),
         keys::xonly(keys::FEE_KEY),
-    );
-    let mut vault = SplitVault::new(Ledger::new(gross_sats, 0, 0, 0));
+    )
+}
+
+/// Instantiates the model over `owner_start_sats` and returns the instantiated vault.
+fn instantiated_model(owner_start_sats: u64) -> Result<SplitVault> {
+    let mut vault = SplitVault::new(Ledger::new(owner_start_sats, 0, 0, 0));
     vault
         .instantiate(
-            descriptor,
+            descriptor(),
             Auth::new(Role::Owner, 1),
             Operation::new(
                 SplitVault::next_operation_id(1),
@@ -116,20 +118,22 @@ pub fn derive(deposit: &Deposit, options: &TransitionOptions) -> Result<Transiti
             ),
         )
         .context_debug("the reference model rejected the fixture instantiate")?;
-    let parent = vault.state();
+    Ok(vault)
+}
 
-    let operation = Operation::new(
-        SplitVault::next_operation_id(2),
-        SplitVault::payload_digest(b"fund"),
-    );
-    let auth = Auth::new(Role::Owner, 2);
-    let accepted: ModelTransition = vault
-        .fund(gross_sats, options.execution_fee_sats, auth, operation)
-        .context_debug("the reference model rejected the fixture fund")?;
-    let resulting = vault.state();
+/// The funding operation and its authorization.
+fn fund_operation() -> (Operation, Auth) {
+    (
+        Operation::new(
+            SplitVault::next_operation_id(2),
+            SplitVault::payload_digest(b"fund"),
+        ),
+        Auth::new(Role::Owner, 2),
+    )
+}
 
-    // 3 The context the model cannot derive. Each value is a deterministic fixture, tagged so two
-    //   different deposits cannot share one.
+/// The fixture context the model cannot derive.
+fn manifest_context(deposit: &Deposit, options: &TransitionOptions) -> (ManifestContext, [u8; 32]) {
     let outpoint = outpoint_preimage(deposit);
     let setup_instance_id = fixture_digest("CubeFixture/SetupInstance/v0", &outpoint);
     let challenge_config_digest = fixture_digest(
@@ -155,19 +159,24 @@ pub fn derive(deposit: &Deposit, options: &TransitionOptions) -> Result<Transiti
             &outpoint,
         ),
     };
+    (context, setup_instance_id)
+}
 
-    let manifest = derive_manifest(&context, &parent, &accepted, auth, operation, &resulting)
-        .context_debug("the manifest could not be derived from the accepted transition")?;
+/// Builds the artifact and one binding per beneficiary allocation.
+fn artifact(
+    manifest: &TransitionManifest,
+    setup_instance_id: [u8; 32],
+    gross_sats: u64,
+    options: &TransitionOptions,
+) -> Result<Transition> {
     manifest
         .validate()
         .context_debug("the derived manifest is invalid")?;
     let statement_digest = manifest.statement_digest();
-
-    // 4 One binding per beneficiary allocation, in manifest order. The claim id is derived from
-    //   the statement and the beneficiary, so the two claims are distinct but reproducible.
     let operator_key = keys::xonly(keys::OPERATOR_SECRET);
     let secret_commitment = disclosure_secret_commitment(&keys::DISCLOSURE_SECRET);
     let mut claims = Vec::new();
+
     for payout in &manifest.payouts {
         if payout.kind != PayoutKind::BeneficiaryAllocation {
             continue;
@@ -200,15 +209,15 @@ pub fn derive(deposit: &Deposit, options: &TransitionOptions) -> Result<Transiti
         terms
             .validate()
             .context_debug("the fixture assertion terms are invalid")?;
-        let binding_digest = terms.binding_digest();
         claims.push(ClaimBinding {
             claim_id: Hex::new(claim_id),
             beneficiary_key: Hex::new(payout.recipient_key),
             amount_sats: payout.amount_sats,
-            binding_digest: Hex::new(binding_digest),
+            binding_digest: Hex::new(terms.binding_digest()),
             terms: (&terms).into(),
         });
     }
+
     if claims.len() != 2 {
         bail!(
             "the fixture manifest must have two beneficiary claims, found {}",
@@ -228,6 +237,136 @@ pub fn derive(deposit: &Deposit, options: &TransitionOptions) -> Result<Transiti
         network_fee_reserve_sats: options.network_fee_reserve_sats,
         challenge_blocks: options.challenge_blocks,
         fee_script: hex::encode(fee_script.as_bytes()),
+        vm: None,
         claims,
     })
+}
+
+/// Derives the transition by running the reference model.
+pub fn derive(deposit: &Deposit, options: &TransitionOptions) -> Result<Transition> {
+    // 1 The deposit must fund the successor's obligations and its miner fee.
+    if options.network_fee_reserve_sats == 0 {
+        bail!("the successor must leave a positive miner fee");
+    }
+    let gross_sats = deposit
+        .value_sats
+        .checked_sub(options.network_fee_reserve_sats)
+        .context("the network fee reserve exceeds the deposit")?;
+
+    // 2 Run the model: instantiate, fund, and keep the accepted transition.
+    let mut vault = instantiated_model(gross_sats)?;
+    let parent = vault.state();
+    let (operation, auth) = fund_operation();
+    let accepted: ModelTransition = vault
+        .fund(gross_sats, options.execution_fee_sats, auth, operation)
+        .context_debug("the reference model rejected the fixture fund")?;
+    let resulting = vault.state();
+
+    // 3 Derive the manifest and the artifact.
+    let (context, setup_instance_id) = manifest_context(deposit, options);
+    let manifest = derive_manifest(&context, &parent, &accepted, auth, operation, &resulting)
+        .context_debug("the manifest could not be derived from the accepted transition")?;
+    artifact(&manifest, setup_instance_id, gross_sats, options)
+}
+
+/// Derives the transition from the state the CubeVM actually reached.
+///
+/// The VM execution must have run with zero entry fees, because the canonical `SplitState` models
+/// the split's obligations and not the Engine's entry-fee market. The value-bearing fields —
+/// owner and fee balances, contract balance, both shadows and the phase — are copied from the VM
+/// into the state, and every one of them is first checked against the reference model.
+pub fn from_vm(
+    deposit: &Deposit,
+    vm: &VmExecution,
+    options: &TransitionOptions,
+) -> Result<Transition> {
+    if options.network_fee_reserve_sats == 0 {
+        bail!("the successor must leave a positive miner fee");
+    }
+    let gross_sats = deposit
+        .value_sats
+        .checked_sub(options.network_fee_reserve_sats)
+        .context("the network fee reserve exceeds the deposit")?;
+    if vm.gross_sats != gross_sats {
+        bail!(
+            "the VM funded {gross_sats} sats but the deposit yields {}",
+            vm.gross_sats
+        );
+    }
+    if vm.execution_fee_sats != options.execution_fee_sats {
+        bail!(
+            "the VM charged an execution fee of {} but the manifest declares {}",
+            vm.execution_fee_sats,
+            options.execution_fee_sats
+        );
+    }
+    if vm.phase_tag != Phase::Allocated.tag() {
+        bail!("the VM vault is not in the ALLOCATED phase");
+    }
+    if vm.entry_fee_sats != 0 {
+        bail!(
+            "the VM charged {} sats of entry fees; the canonical state does not model them",
+            vm.entry_fee_sats
+        );
+    }
+
+    // 1 Run the model with the VM's starting balance. It is the differential oracle.
+    let mut vault = instantiated_model(vm.owner_start_sats)?;
+    let parent = vault.state();
+    let (operation, auth) = fund_operation();
+    let accepted: ModelTransition = vault
+        .fund(gross_sats, options.execution_fee_sats, auth, operation)
+        .context_debug("the reference model rejected the fixture fund")?;
+    let oracle = vault.state();
+    let oracle_instance = oracle
+        .instance
+        .context("the reference model produced no instance")?;
+
+    // 2 Every value-bearing field must agree before the VM's state is used.
+    if oracle_instance.contract_balance_sats != vm.contract_balance_sats
+        || oracle_instance.bob_shadow_sats != vm.bob_shadow_sats
+        || oracle_instance.carol_shadow_sats != vm.carol_shadow_sats
+        || oracle.ledger.owner_sats != vm.owner_balance_sats
+        || oracle.ledger.fee_sats != vm.fee_balance_sats
+    {
+        bail!(
+            "the VM's funded state does not match the reference model: \
+             vm(contract={}, bob={}, carol={}, owner={}, fee={}) \
+             model(contract={}, bob={}, carol={}, owner={}, fee={})",
+            vm.contract_balance_sats,
+            vm.bob_shadow_sats,
+            vm.carol_shadow_sats,
+            vm.owner_balance_sats,
+            vm.fee_balance_sats,
+            oracle_instance.contract_balance_sats,
+            oracle_instance.bob_shadow_sats,
+            oracle_instance.carol_shadow_sats,
+            oracle.ledger.owner_sats,
+            oracle.ledger.fee_sats,
+        );
+    }
+
+    // 3 Copy the VM's values into the canonical state. The identity and sequence fields come from
+    //   the model: the VM template does not write the canonical instance identity or the caller
+    //   sequences yet. That representation gap is documented in docs/e2e_regtest.md.
+    let mut vm_state: SplitState = oracle.clone();
+    {
+        let instance = vm_state
+            .instance
+            .as_mut()
+            .context("the reference model produced no instance")?;
+        instance.contract_balance_sats = vm.contract_balance_sats;
+        instance.bob_shadow_sats = vm.bob_shadow_sats;
+        instance.carol_shadow_sats = vm.carol_shadow_sats;
+        vm_state.ledger.owner_sats = vm.owner_balance_sats;
+        vm_state.ledger.fee_sats = vm.fee_balance_sats;
+    }
+
+    // 4 Derive the manifest from the VM's resulting state.
+    let (context, setup_instance_id) = manifest_context(deposit, options);
+    let manifest = derive_manifest(&context, &parent, &accepted, auth, operation, &vm_state)
+        .context_debug("the manifest could not be derived from the VM's state")?;
+    let mut transition = artifact(&manifest, setup_instance_id, gross_sats, options)?;
+    transition.vm = Some(vm.clone());
+    Ok(transition)
 }

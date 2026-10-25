@@ -10,6 +10,7 @@
 //! encodings the repository already freezes — the manifest, the recovery package, a transaction —
 //! travel as hex of the encoded bytes, so the artifact never becomes a second, drifting schema.
 
+use crate::engine::VmExecution;
 use crate::DebugContext;
 use anyhow::{bail, Context, Result};
 use bitcoin::hashes::Hash as _;
@@ -233,6 +234,9 @@ pub struct Transition {
     pub challenge_blocks: u32,
     /// The script the successor pays the execution fee to, hex.
     pub fee_script: String,
+    /// The CubeVM execution the manifest was derived from, when this transition is VM-derived.
+    #[serde(default)]
+    pub vm: Option<VmExecution>,
     /// One binding per beneficiary allocation, in manifest order.
     pub claims: Vec<ClaimBinding>,
 }

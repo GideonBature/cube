@@ -51,7 +51,7 @@ const PACKAGE_EXPIRY_BLOCKS: u64 = 432;
 const PACKAGE_FEE_RATE: u64 = 10;
 
 /// The name and one-line description of every scenario.
-pub const SCENARIOS: [(&str, &str); 6] = [
+pub const SCENARIOS: [(&str, &str); 7] = [
     (
         "liftv2-cooperative",
         "deposit -> successor with two v2 claims -> one cooperative settlement",
@@ -75,6 +75,10 @@ pub const SCENARIOS: [(&str, &str); 6] = [
     (
         "engine-offline",
         "a one-signer successor is rejected and the participant exits through the mature refund",
+    ),
+    (
+        "engine-e2e",
+        "the CubeVM executes fund_split, the manifest is derived from the VM's state, and Bitcoin settles the two claims",
     ),
 ];
 
@@ -523,7 +527,10 @@ pub fn verify_transition(state: &State) -> Result<serde_json::Value> {
         table_digest: Some(first.terms.table_digest.0),
         input_digest: Some(first.terms.input_digest.0),
     };
-    let again = transition::derive(deposit, &options)?;
+    let again = match &transition.vm {
+        Some(vm) => transition::from_vm(deposit, vm, &options)?,
+        None => transition::derive(deposit, &options)?,
+    };
     if again.manifest != transition.manifest {
         bail!("the stored manifest is not the one this deposit derives");
     }
@@ -1141,6 +1148,7 @@ pub fn run(
         "liftv2-refund" => liftv2_refund(chain, state, options),
         "engine-cheat" => engine_cheat(chain, state, options),
         "engine-offline" => engine_offline(chain, state, options),
+        "engine-e2e" => engine_e2e(chain, state, options),
         other => bail!(
             "unknown scenario `{other}`; known scenarios: {}",
             SCENARIOS
@@ -1202,6 +1210,84 @@ fn liftv2_cooperative(
     );
 
     let settlement = settle_claims(chain, state, None, options.settle_fee_input_sats)?;
+    report.step(
+        "settlement",
+        Some(Txid::from_byte_array(settlement.txid.0)),
+        json!({
+            "miner_fee_sats": settlement.miner_fee_sats,
+            "payouts": settlement.payouts,
+        }),
+    );
+
+    Ok(report)
+}
+
+/// `engine-e2e`: the CubeVM executes the split, its state becomes the manifest, and Bitcoin settles.
+///
+/// This is the composed path. The value-bearing fields of the resulting state — the owner and fee
+/// balances, the contract balance, both shadows and the phase — are read from the CubeVM managers
+/// after `exec_call_in_pool`, and `derive_manifest` runs on that state. The reference model is
+/// still executed, but as a differential guard: any disagreement aborts before a Bitcoin
+/// transaction is built.
+fn engine_e2e(
+    chain: &Chain,
+    state: &mut State,
+    options: &ScenarioOptions,
+) -> Result<ScenarioReport> {
+    let mut report = ScenarioReport::new("engine-e2e", chain.wallet());
+
+    let deposit = fund_deposit(chain, state, options.deposit_sats)?;
+    report.step(
+        "deposit",
+        Some(Txid::from_byte_array(deposit.funding_txid.0)),
+        json!({ "value_sats": deposit.value_sats }),
+    );
+
+    // 1 The CubeVM executes `fund_split` through the production admission path.
+    let transition_options = options.transition();
+    let gross_sats = deposit
+        .value_sats
+        .checked_sub(transition_options.network_fee_reserve_sats)
+        .context("the network fee reserve exceeds the deposit")?;
+    let owner_start_sats = 1_000_000u64.max(gross_sats);
+    let vm = crate::engine::fund_split(gross_sats, options.execution_fee_sats, owner_start_sats)?;
+    report.step(
+        "vm_fund_split",
+        None,
+        serde_json::to_value(&vm).context("cannot encode the VM execution")?,
+    );
+
+    // 2 The manifest is derived from the state the VM reached.
+    let transition = transition::from_vm(&deposit, &vm, &transition_options)?;
+    state.transition = Some(transition.clone());
+    state.tree = None;
+    state.assertion = None;
+    report.step(
+        "manifest_from_vm",
+        None,
+        json!({
+            "statement_digest": transition.statement_digest,
+            "gross_sats": transition.gross_sats,
+            "claims": transition.claims.iter().map(|claim| json!({
+                "beneficiary": keys::name_for_xonly(claim.beneficiary_key.0).unwrap_or("unknown"),
+                "amount_sats": claim.amount_sats,
+                "binding_digest": claim.binding_digest,
+            })).collect::<Vec<_>>(),
+        }),
+    );
+
+    // 3 Re-run the VM-derived verification and the Bitcoin graph.
+    report.step("verify", None, verify_transition(state)?);
+
+    let tree = publish_successor(chain, state)?;
+    report.step(
+        "successor",
+        Some(Txid::from_byte_array(tree.txid.0)),
+        json!({ "claims": tree.claims.len() }),
+    );
+
+    let destinations = options.destination.clone().map(|address| vec![address; 2]);
+    let settlement = settle_claims(chain, state, destinations, options.settle_fee_input_sats)?;
     report.step(
         "settlement",
         Some(Txid::from_byte_array(settlement.txid.0)),

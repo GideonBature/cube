@@ -80,6 +80,7 @@ cargo run -p cube-cli -- scenario list
 cargo run -p cube-cli -- scenario run liftv2-cooperative
 cargo run -p cube-cli -- scenario run liftv2-dispute
 cargo run -p cube-cli -- scenario run proof-take
+cargo run -p cube-cli -- scenario run engine-e2e
 cargo run -p cube-cli -- scenario run engine-cheat
 cargo run -p cube-cli -- scenario run engine-offline
 cargo run -p cube-cli -- scenario run liftv2-refund   # mines ~13,000 blocks

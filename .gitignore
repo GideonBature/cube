@@ -6,6 +6,8 @@ nns_ip_address.txt
 # cube-cli artifacts (the default --state path)
 /cube-state.json
 /cube-state.json.tmp
+# in-process Engine fixtures write their disposable databases here
+/crates/cube-scenario/storage/
 
 # Editor and IDE files
 *.orig

@@ -16,10 +16,27 @@ a failure does not poison the next one.
 
 ---
 
-## 0. Scope: what this run does and does not prove
+## 0. Scope: the Engine, this test driver, and what is still missing
 
-The Bitcoin-side ownership graph is complete and regtested for the **participant-scoped profile**.
-That is not the whole whitepaper. The table is deliberately blunt.
+**The Engine is implemented in this repository.** `src/operative` starts the runner, the session
+pool and the managers. `SessionPool::exec_deploy_in_pool`, `exec_liftup_in_pool`,
+`exec_call_in_pool` and `exec_move_in_pool` admit BLS-signed entries; `ExecCtx::execute_batch`
+executes the CubeVM; the managers own balances, registry, contract state, privileges, flame and the
+graveyard; `BatchContainer` carries an aggregate-signed batch towards Bitcoin.
+`tests/split_vault_template.rs`, `tests/call_entry.rs` and `tests/simul.rs` drive that production
+admission path, not a test-only shim: the template is registered, then funded, redeemed and
+rejected through `exec_call_in_pool`, and `simul.rs` runs a liftup through `exec_liftup_in_pool`
+and executes the resulting batch container.
+
+**`cube-cli` is a test driver for the Bitcoin ownership graph, and it now also boots the Engine's
+execution components in-process for the composed run.** It does not boot `runner::run`, because
+that runtime is an interactive operator process with chain sync, a key holder and a run
+configuration. Printing "the CLI does not start an Engine session" therefore says nothing about
+whether the Engine exists; it only says which runtime this driver starts. `scenario run engine-e2e`
+boots the managers and the session pool, executes `fund_split` through `exec_call_in_pool`, and
+continues into the Bitcoin graph.
+
+The table is deliberately blunt.
 
 | Area | Exercised by | Status |
 |---|---|---|
@@ -32,23 +49,55 @@ That is not the whole whitepaper. The table is deliberately blunt.
 | A real Groth16 proof evaluated by Argo's table | `tests/proof_take_regtest.rs` (release, ignored) | implemented, regtested |
 | Cheating operator/Engine attempts | `scenario run engine-cheat` | implemented, regtested |
 | Engine unavailable before the successor | `scenario run engine-offline` | implemented, regtested |
-| CubeVM contract execution (template, entry, call) | `fixed_split_vault`, `split_vault_template`, `call_entry` | in-process suite |
-| State manager persistence and garbage collection | `state_manager`, `graveyard` | in-process suite |
-| Batch atomicity and rollback | `batch_atomicity` | in-process suite |
+| CubeVM contract execution (template, entry, call) | `fixed_split_vault`, `split_vault_template`, `call_entry` | implemented, in-process suite |
+| State manager persistence and garbage collection | `state_manager`, `graveyard` | implemented, in-process suite |
+| Batch atomicity and rollback | `batch_atomicity` | implemented, in-process suite |
+| **VM state -> manifest -> Bitcoin settlement in one run** | `scenario run engine-e2e` | implemented, regtested (zero entry fees) |
+| **VM-derived manifest -> real Groth16 proof in one run** | none | **composition gap** |
+| **Engine-scanned LiftV2 liftup in a node run** | none | **config gap** |
 | BIP-340 inside the proof relation | none | **not implemented** (`BIND-01`) |
 | Unilateral operator assertion without the beneficiary | none | **not implemented** (`BIND-01`) |
 | Data availability of the table and authenticated input | none | **commitments only** (`DA-01`) |
 | Reorg, crash during `apply_changes`, restart reconciliation | none | **not covered** |
 | Fee policy from a fee rate | caller-supplied bounds only | **policy gap** |
 
-Two boundaries explain most of the table:
+### What the composed run settles, and what is still open
 
-1. **The CLI stops at the Bitcoin graph.** It does not start an Engine session, does not submit BLS
-   batch entries, and therefore cannot drive CubeVM accounts, liftups or the graveyard. Those are
-   covered by the Rust suites in stage 12, which run the real managers against sled test databases.
-2. **The participant-scoped assertion is signed by the beneficiary.** `Take` and `Disprove` are
-   real, but an operator cannot publish an `Assert` alone. A stronger unilateral profile needs a
-   public input-label opening Argo does not expose; see `docs/bind_01.md`.
+`scenario run engine-e2e` closes the value path:
+
+1. it boots the same managers and session pool the node uses;
+2. it executes `fund_split` through `exec_call_in_pool` with zero entry fees;
+3. it reads the owner and fee balances, the contract balance, both shadows and the phase back from
+   the managers;
+4. it checks every value against the reference model and aborts on a one-satoshi disagreement;
+5. it derives the manifest from that VM state (`transition::from_vm`) and records the execution in
+   the artifact;
+6. it publishes the successor and settles both claims on Bitcoin.
+
+What this does **not** settle:
+
+- **The canonical-state adapter.** `SplitState`'s contract identity and caller sequences are graph
+  metadata; the template does not write them. The state digests therefore combine VM values with
+  model identity and sequence fields.
+- **Entry fees.** The composed run uses zero entry fees: the canonical state models the split's
+  obligations, not the Engine's entry-fee market. A production flow must either exclude Engine
+  fees from the canonical ledger by design or extend the relation to model them.
+- **The proof.** `proof_take_regtest` proves a model-derived manifest. Proving the VM-derived
+  manifest in the same run is the remaining composition step.
+- **LiftV2 scanning.** `V2_LIFT_ENABLED` is off in the runner, so the Engine does not yet scan and
+  lift the V2 outputs that the graph uses; every scenario funds the deposit externally.
+
+These are integration and representation tasks on top of implemented components.
+
+### The genuine research and operational gaps
+
+- **The participant-scoped assertion is signed by the beneficiary.** `Take` and `Disprove` are
+  real, but an operator cannot publish an `Assert` alone. A stronger unilateral profile needs a
+  public input-label opening Argo does not expose; see `docs/bind_01.md` (`BIND-01`).
+- **In-circuit BIP-340** is not implemented; authorization is graph-enforced (specification §8.2).
+- **Data availability** of the table and the authenticated input is not implemented; the chain
+  carries commitments only (`DA-01`).
+- **Production setup, reorg/crash recovery, fee policy and admission limits** are open.
 
 Everything in stages 1–11 is executed by the CLI against Bitcoin Core. Nothing is a paper claim.
 
@@ -156,7 +205,7 @@ Expected error: `the network fee reserve exceeds the deposit`. The successor mus
 miner fee, so a 1,000-sat deposit is rejected before any manifest is derived.
 
 This stage does **not** create a Cube root account or run a liftup. That is a CubeVM entry path,
-covered in stage 12; the CLI begins at the Bitcoin ownership layer.
+covered in stage 13; the CLI begins at the Bitcoin ownership layer.
 
 ---
 
@@ -493,11 +542,49 @@ cube --state target/e2e/refund.json refund --fee-sats 500 --mine-past-maturity
 
 ---
 
-## 12. Stage 11 — State integrity, atomicity and garbage collection
+## 12. Stage 11b — The composed CubeVM run (`engine-e2e`)
 
-The CLI checks the Bitcoin-side state (stages 2–5). The CubeVM state manager, the graveyard and the
-execution rollback are **not** exposed by the CLI: a CubeVM entry is a BLS-authorised Engine
-message, and the CLI deliberately does not start an Engine session. Run the real managers instead:
+This is the run that joins the Engine and the Bitcoin graph. It boots the managers and the session
+pool in-process, executes `fund_split` through `exec_call_in_pool`, reads the value-bearing state
+back from the managers, derives the manifest from that state, and settles the two claims on Bitcoin.
+
+```sh
+cube --state target/e2e/engine.json scenario run engine-e2e \
+  | jq -e '(.steps | length) == 6 and .steps[1].outcome.entry_fee_sats == 0'
+```
+
+Expected:
+
+| Step | What it proves | Values |
+|---|---|---|
+| `deposit` | the Bitcoin deposit exists | 500,000 sats |
+| `vm_fund_split` | the CubeVM executed the call | contract 493,000; Bob 345,100; Carol 147,900; fee 5,000; owner 502,000; entry fee 0 |
+| `manifest_from_vm` | the manifest comes from the VM state | statement digest and both bindings |
+| `verify` | `transition verify` re-runs the VM-derived path | `verified: true` |
+| `successor` | the manifest is funded into two v2 claims | 2 claims |
+| `settlement` | both claims leave in one transaction | 345,100 + 147,900 |
+
+The `vm` section of the state file records the execution, so `transition verify` re-runs
+`transition::from_vm` instead of the model-only derivation.
+
+Why zero entry fees: the canonical `SplitState` models the split's obligations, not the Engine's
+entry-fee market. Running the VM with `call_entry_base_fee = 0` and
+`call_entry_ppm_calldata_bytesize_fee = 0` makes the VM ledger and the canonical state directly
+comparable. The execution fee is still charged by the template as its own transfer. A production
+flow must either exclude Engine entry fees from the canonical ledger by design or extend the
+relation to model them; see section 0.
+
+The composed run aborts before any Bitcoin transaction if a single VM value disagrees with the
+reference model. That check is what makes the manifest a statement about the VM's execution rather
+than a second model run.
+
+---
+
+## 13. Stage 12 — State integrity, atomicity and garbage collection
+
+`cube-cli` checks the Bitcoin-side state (stages 2–5) and boots the managers and session pool for
+the composed run (stage 11b). It still does not boot `runner::run`; the graveyard and manager suites
+are run directly below:
 
 ```sh
 cargo test --test state_manager      # register a contract, insert two keys, apply, reload
@@ -529,33 +616,37 @@ That is the rollback guarantee: validation failure leaves no delta behind.
 fresh manager reading the values back from sled. `graveyard` does the same for burial and redemption
 accounting. Those are the garbage-collection and death paths at the manager level.
 
-### Known boundary
+### Known boundaries
 
 The `ExecCtx` rollback covers the execution delta, not a crash inside a manager's `apply_changes`
 flush. `batch_atomicity` proves a rejected batch, not a power loss mid-write. Crash/reorg recovery
 is not implemented and is listed as a gap in the specification's test matrix.
 
+The VM and Bitcoin halves are composed for the value path by stage 11b. What remains is the
+representation adapter (canonical identity and sequences), entry fees, and a real proof over a
+VM-derived manifest (section 0).
+
 ---
 
-## 13. Stage 12 — Full regression
+## 14. Stage 13 — Full regression
 
 ```sh
-# offline artifact and derivation tests
+# offline artifact, derivation and composed-Engine tests
 cargo test -p cube-scenario
 
-# six Bitcoin-graph scenarios, fresh chain per run
+# seven scenarios, fresh chain per run
 ./scripts/regtest.sh cli
 
 # node-backed test files plus the release proof test
 ./scripts/regtest.sh all
 ```
 
-Expected: `cube-scenario` 3 passed; `cli` exit 0 with six scenario reports; `all` exit 0 with every
-node-backed file green and `proof_take_regtest` reporting `valid proof taken`.
+Expected: `cube-scenario` 5 passed; `cli` exit 0 with seven scenario reports; `all` exit 0 with
+every node-backed file green and `proof_take_regtest` reporting `valid proof taken`.
 
-`./scripts/regtest.sh cli` takes about 2m40s. It runs, in order: `liftv2-cooperative`,
-`liftv2-dispute`, `proof-take`, `engine-cheat`, `engine-offline`, `liftv2-refund`. The last two mine
-12,960 blocks each.
+`./scripts/regtest.sh cli` takes about 3 minutes. It runs, in order: `liftv2-cooperative`,
+`liftv2-dispute`, `proof-take`, `engine-e2e`, `engine-cheat`, `engine-offline`, `liftv2-refund`.
+The last two mine 12,960 blocks each.
 
 ---
 
@@ -596,5 +687,6 @@ the artifact so the history remains inspectable.
 | §8.2 graph-enforced authorization | stages 4, 8, 9: MuSig2 over the successor, beneficiary-signed assertions, node rejections |
 | §9.2 roles: SuccessorFunding, Recovery, Assert/Take/Disprove, CooperativeSettle | stages 4–11 |
 | Binding construction | stage 5 and `docs/bind_01.md` |
-| State/GC and rollback | stage 12 |
+| VM state -> manifest -> Bitcoin settlement | stage 11b |
+| State/GC and rollback | stage 13 |
 | Remaining gaps | section 0 and `docs/implementation.md` |
