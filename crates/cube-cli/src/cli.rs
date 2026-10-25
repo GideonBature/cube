@@ -145,6 +145,8 @@ pub enum DepositCommand {
     },
     /// Print the recorded deposit.
     Show,
+    /// Re-check the deposit against the fixture address and the chain.
+    Verify,
 }
 
 /// Transition operations.
@@ -154,6 +156,8 @@ pub enum TransitionCommand {
     Build(TransitionArgs),
     /// Print the recorded transition.
     Show,
+    /// Re-derive the transition and compare every stored byte.
+    Verify,
 }
 
 /// Parameters of the derived transition.
@@ -186,6 +190,8 @@ pub enum SuccessorCommand {
     Publish,
     /// Print the recorded successor.
     Show,
+    /// Re-run the successor verifier and every claim package.
+    Verify,
 }
 
 /// Claim operations.

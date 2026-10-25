@@ -29,7 +29,8 @@ use crate::DebugContext;
 use anyhow::{bail, Context, Result};
 use bitcoin::consensus::encode::serialize_hex;
 use bitcoin::hashes::Hash as _;
-use bitcoin::{Address, Network, OutPoint, ScriptBuf, TxOut, Txid, Witness};
+use bitcoin::{Address, Network, OutPoint, ScriptBuf, Transaction, TxOut, Txid, Witness};
+use cube::constructive::contracts::fixed_split_vault_v1::claim::statement_op_return_script;
 use cube::constructive::contracts::fixed_split_vault_v1::recovery_package::ClaimRecoveryPackage;
 use cube::constructive::graph::assertion::{
     Assertion, AssertionAnchor, AssertionClaim, ContestedOutput, DisproveSpend, TakeSpend,
@@ -39,7 +40,7 @@ use cube::constructive::graph::cooperative_settle::CooperativeSettle;
 use cube::constructive::graph::successor_funding::{
     DepositAnchor, FeeBounds, FundingOutput, SuccessorFunding,
 };
-use cube::model::fixed_split_vault_v1::manifest::{Anchor, ReleaseProfile};
+use cube::model::fixed_split_vault_v1::manifest::{Anchor, ReleaseProfile, TransitionManifest};
 use serde::Serialize;
 use serde_json::json;
 
@@ -50,7 +51,7 @@ const PACKAGE_EXPIRY_BLOCKS: u64 = 432;
 const PACKAGE_FEE_RATE: u64 = 10;
 
 /// The name and one-line description of every scenario.
-pub const SCENARIOS: [(&str, &str); 4] = [
+pub const SCENARIOS: [(&str, &str); 6] = [
     (
         "liftv2-cooperative",
         "deposit -> successor with two v2 claims -> one cooperative settlement",
@@ -66,6 +67,14 @@ pub const SCENARIOS: [(&str, &str); 4] = [
     (
         "liftv2-refund",
         "deposit -> premature refund rejected -> mine past the timelock -> refund accepted",
+    ),
+    (
+        "engine-cheat",
+        "tampered successors, a forged assertion, a premature take, a wrong take signer and a wrong secret are all rejected; the honest path still settles",
+    ),
+    (
+        "engine-offline",
+        "a one-signer successor is rejected and the participant exits through the mature refund",
     ),
 ];
 
@@ -293,8 +302,17 @@ pub fn build_transition(state: &mut State, options: &TransitionOptions) -> Resul
     Ok(transition)
 }
 
-/// Builds, verifies, signs and publishes the successor funding.
-pub fn publish_successor(chain: &Chain, state: &mut State) -> Result<Tree> {
+/// A successor that is built and signed but not yet published.
+struct PreparedSuccessor {
+    transition: Transition,
+    manifest: TransitionManifest,
+    funding: SuccessorFunding,
+    transaction: Transaction,
+    statement_vout: u32,
+}
+
+/// Builds the successor, signs the deposit key path and re-runs the graph verifier.
+fn prepare_successor(state: &State) -> Result<PreparedSuccessor> {
     let deposit = state.require_deposit()?.clone();
     let transition = state.require_transition()?.clone();
     let manifest = transition.manifest()?;
@@ -313,20 +331,20 @@ pub fn publish_successor(chain: &Chain, state: &mut State) -> Result<Tree> {
         &transition.bindings(),
     )
     .context_debug("the successor does not fund every manifest obligation")?;
-    let mut successor = funding.transaction();
+    let mut transaction = funding.transaction();
 
     // 2 Sign the deposit's key path with MuSig2 and self-check the aggregate.
-    successor.input[0].witness = signing::deposit_key_path_witness(
+    transaction.input[0].witness = signing::deposit_key_path_witness(
         &taproot,
         &[keys::ALICE_SECRET, keys::ENGINE_SECRET],
-        &successor,
+        &transaction,
         0,
         &deposit_prevout,
     )?;
 
     // 3 Re-run the graph verifier over the exact bytes that will be broadcast.
     SuccessorFunding::verify_with_assertions(
-        &successor,
+        &transaction,
         &manifest,
         deposit.outpoint(),
         deposit.value_sats,
@@ -338,18 +356,30 @@ pub fn publish_successor(chain: &Chain, state: &mut State) -> Result<Tree> {
     )
     .context_debug("the signed successor fails the graph verifier")?;
 
-    // 4 Bitcoin Core must accept it before anything is published.
-    chain
-        .test_mempool_accept(&successor)?
-        .require("the successor funding")?;
-    let txid = chain.broadcast(&successor, true)?;
+    let statement_vout = (funding.outputs().len() - 1) as u32;
+    Ok(PreparedSuccessor {
+        transition,
+        manifest,
+        funding,
+        transaction,
+        statement_vout,
+    })
+}
 
-    // 5 Record one claim per beneficiary output, with the v2 package the beneficiary can recover
+/// Publishes a prepared successor and records the ownership tree it created.
+fn publish_prepared(chain: &Chain, state: &mut State, prepared: PreparedSuccessor) -> Result<Tree> {
+    // 1 Bitcoin Core must accept it before anything is published.
+    chain
+        .test_mempool_accept(&prepared.transaction)?
+        .require("the successor funding")?;
+    let txid = chain.broadcast(&prepared.transaction, true)?;
+
+    // 2 Record one claim per beneficiary output, with the v2 package the beneficiary can recover
     //   from without the Engine.
     let expiry_height = chain.height()? + PACKAGE_EXPIRY_BLOCKS;
     let mut claims = Vec::new();
     let mut beneficiary_index = 0u32;
-    for (vout, output) in funding.outputs().iter().enumerate() {
+    for (vout, output) in prepared.funding.outputs().iter().enumerate() {
         let FundingOutput::Claim {
             beneficiary_key,
             amount_sats,
@@ -359,7 +389,8 @@ pub fn publish_successor(chain: &Chain, state: &mut State) -> Result<Tree> {
         else {
             continue;
         };
-        let binding = transition
+        let binding = prepared
+            .transition
             .claims
             .iter()
             .find(|claim| claim.beneficiary_key.0 == beneficiary_key)
@@ -369,16 +400,16 @@ pub fn publish_successor(chain: &Chain, state: &mut State) -> Result<Tree> {
             binding.claim_id.0,
             None,
             beneficiary_key,
-            manifest.template_hash,
-            manifest.circuit_id,
-            transition.statement_digest.0,
+            prepared.manifest.template_hash,
+            prepared.manifest.circuit_id,
+            prepared.transition.statement_digest.0,
             binding.binding_digest.0,
             amount_sats,
             Some(Anchor::new(txid.to_byte_array(), vout as u32)),
             expiry_height,
             PACKAGE_FEE_RATE,
-            manifest.setup_instance_id,
-            manifest.challenge_config_digest,
+            prepared.manifest.setup_instance_id,
+            prepared.manifest.challenge_config_digest,
         )
         .context("the v2 recovery package could not be built")?;
         package
@@ -402,13 +433,230 @@ pub fn publish_successor(chain: &Chain, state: &mut State) -> Result<Tree> {
 
     let tree = Tree {
         txid: Hex::new(txid.to_byte_array()),
-        hex: serialize_hex(&successor),
-        statement_vout: (funding.outputs().len() - 1) as u32,
+        hex: serialize_hex(&prepared.transaction),
+        statement_vout: prepared.statement_vout,
         claims,
     };
     state.tree = Some(tree.clone());
     state.assertion = None;
     Ok(tree)
+}
+
+/// Builds, verifies, signs and publishes the successor funding.
+pub fn publish_successor(chain: &Chain, state: &mut State) -> Result<Tree> {
+    let prepared = prepare_successor(state)?;
+    publish_prepared(chain, state, prepared)
+}
+
+/// Re-checks the deposit artifact against the fixture address and the chain.
+pub fn verify_deposit(chain: &Chain, state: &State) -> Result<serde_json::Value> {
+    let deposit = state.require_deposit()?;
+    let taproot = keys::liftv2_taproot().context("the LiftV2 taproot could not be constructed")?;
+    let expected_script = ScriptBuf::from_bytes(
+        taproot
+            .spk()
+            .context("the LiftV2 taproot has no scriptpubkey")?,
+    );
+    let expected_address = Address::from_script(&expected_script, Network::Regtest)
+        .context("the fixture deposit script is not a valid address")?;
+
+    if deposit.spk()? != expected_script {
+        bail!("the recorded deposit script is not the fixture LiftV2 taproot");
+    }
+    if deposit.address != expected_address.to_string() {
+        bail!("the recorded deposit address is not the fixture address");
+    }
+    if deposit.account_key.0 != keys::xonly(keys::ALICE_SECRET)
+        || deposit.engine_key.0 != keys::xonly(keys::ENGINE_SECRET)
+    {
+        bail!("the recorded deposit keys are not the fixture keys");
+    }
+
+    let outpoint = deposit.outpoint();
+    let transaction = chain.wallet_transaction(outpoint.txid)?;
+    let output = transaction
+        .output
+        .get(outpoint.vout as usize)
+        .context("the funding transaction has no output at the recorded index")?;
+    if output.script_pubkey != expected_script {
+        bail!("the funded output does not pay the fixture deposit script");
+    }
+    if output.value.to_sat() != deposit.value_sats {
+        bail!("the funded output value does not match the recorded deposit value");
+    }
+
+    Ok(json!({
+        "verified": true,
+        "address": &deposit.address,
+        "value_sats": deposit.value_sats,
+        "funding_unspent": chain.unspent(outpoint.txid, outpoint.vout)?,
+    }))
+}
+
+/// Re-derives the transition and checks every stored byte against the derivation.
+pub fn verify_transition(state: &State) -> Result<serde_json::Value> {
+    let deposit = state.require_deposit()?;
+    let transition = state.require_transition()?;
+    let manifest = transition.manifest()?;
+    manifest
+        .validate()
+        .context_debug("the stored manifest is invalid")?;
+    if manifest.statement_digest() != transition.statement_digest.0 {
+        bail!("the stored statement digest is not the manifest's digest");
+    }
+    if transition.gross_sats + transition.network_fee_reserve_sats != deposit.value_sats {
+        bail!("the stored gross value and fee reserve do not add up to the deposit");
+    }
+    if transition.execution_fee_sats >= transition.gross_sats {
+        bail!("the stored execution fee is not below the gross value");
+    }
+
+    let first = transition
+        .claims
+        .first()
+        .context("the transition has no claims")?;
+    let options = TransitionOptions {
+        network_fee_reserve_sats: transition.network_fee_reserve_sats,
+        execution_fee_sats: transition.execution_fee_sats,
+        challenge_blocks: transition.challenge_blocks,
+        verifier_key_identity: Some(first.terms.verifier_key_identity.0),
+        table_digest: Some(first.terms.table_digest.0),
+        input_digest: Some(first.terms.input_digest.0),
+    };
+    let again = transition::derive(deposit, &options)?;
+    if again.manifest != transition.manifest {
+        bail!("the stored manifest is not the one this deposit derives");
+    }
+    if again.claims != transition.claims {
+        bail!("the stored claim bindings are not the ones this deposit derives");
+    }
+
+    Ok(json!({
+        "verified": true,
+        "statement_digest": transition.statement_digest,
+        "gross_sats": transition.gross_sats,
+        "execution_fee_sats": transition.execution_fee_sats,
+        "claims": transition.claims.iter().map(|claim| json!({
+            "beneficiary": keys::name_for_xonly(claim.beneficiary_key.0).unwrap_or("unknown"),
+            "amount_sats": claim.amount_sats,
+            "binding_digest": claim.binding_digest,
+        })).collect::<Vec<_>>(),
+    }))
+}
+
+/// Re-runs the successor verifier and every claim package against the stored artifacts.
+pub fn verify_successor(chain: &Chain, state: &State) -> Result<serde_json::Value> {
+    let deposit = state.require_deposit()?;
+    let transition = state.require_transition()?;
+    let tree = state.require_tree()?;
+    let manifest = transition.manifest()?;
+
+    let raw = hex::decode(&tree.hex).context("the stored successor is not hex")?;
+    let transaction: Transaction =
+        bitcoin::consensus::deserialize(&raw).context("the stored successor does not decode")?;
+    if transaction.compute_txid().to_byte_array() != tree.txid.0 {
+        bail!("the stored successor bytes do not hash to the stored txid");
+    }
+    if transaction.input[0].witness.is_empty() {
+        bail!("the stored successor carries no signature");
+    }
+
+    let funding = SuccessorFunding::verify_with_assertions(
+        &transaction,
+        &manifest,
+        deposit.outpoint(),
+        deposit.value_sats,
+        FeeBounds::new(
+            transition.network_fee_reserve_sats,
+            transition.network_fee_reserve_sats,
+        ),
+        &transition.bindings(),
+    )
+    .context_debug("the stored successor fails the graph verifier")?;
+
+    // The statement commitment must be the manifest's field-sized digest, at zero value.
+    let commitment = transaction
+        .output
+        .get(tree.statement_vout as usize)
+        .context("the successor has no statement commitment output")?;
+    let expected_commitment = statement_op_return_script(manifest.statement_digest());
+    if commitment.value.to_sat() != 0
+        || commitment.script_pubkey.as_bytes() != expected_commitment.as_slice()
+    {
+        bail!("the statement commitment output is not the manifest digest");
+    }
+
+    let successor_txid = Txid::from_byte_array(tree.txid.0);
+    let mut all_unspent = true;
+    let mut claims = Vec::new();
+    for claim in &tree.claims {
+        let output = funding
+            .outputs()
+            .get(claim.vout as usize)
+            .context("the successor has no output at a claim's index")?;
+        let FundingOutput::Claim {
+            beneficiary_key,
+            amount_sats,
+            script_pubkey,
+            assertion_binding_digest,
+        } = output
+        else {
+            bail!("successor output {} is not a claim", claim.vout);
+        };
+        if *beneficiary_key != claim.beneficiary_key.0 || *amount_sats != claim.amount_sats {
+            bail!("claim {} does not match the successor output", claim.index);
+        }
+        let claim_script = claim.spk()?;
+        if claim_script != *script_pubkey {
+            bail!(
+                "claim {} script does not match the successor output",
+                claim.index
+            );
+        }
+        let binding = claim.terms.binding_digest().0;
+        if *assertion_binding_digest != Some(binding) {
+            bail!(
+                "claim {} binding is not the one in the successor",
+                claim.index
+            );
+        }
+
+        let package = claim.package()?;
+        package
+            .validate()
+            .context_debug("a stored claim package is invalid")?;
+        if package.claim_scriptpubkey().as_deref() != Some(claim_script.as_bytes()) {
+            bail!("claim {} package does not describe its script", claim.index);
+        }
+        if package.claim_outpoint != Some(Anchor::new(tree.txid.0, claim.vout)) {
+            bail!("claim {} package anchors another outpoint", claim.index);
+        }
+        if package.statement_digest != manifest.statement_digest() {
+            bail!("claim {} package binds another statement", claim.index);
+        }
+        if package.assertion_binding_digest != Some(binding) {
+            bail!("claim {} package carries another binding", claim.index);
+        }
+
+        let unspent = chain.unspent(successor_txid, claim.vout)?;
+        all_unspent &= unspent;
+        claims.push(json!({
+            "index": claim.index,
+            "vout": claim.vout,
+            "beneficiary": keys::name_for_xonly(claim.beneficiary_key.0).unwrap_or("unknown"),
+            "amount_sats": claim.amount_sats,
+            "unspent": unspent,
+        }));
+    }
+
+    Ok(json!({
+        "verified": true,
+        "successor": tree.txid,
+        "statement_digest": Hex::new(manifest.statement_digest()),
+        "miner_fee_sats": funding.miner_fee_sats(),
+        "claims": claims,
+        "all_claims_unspent": all_unspent,
+    }))
 }
 
 /// Spends every claim in one cooperative settlement.
@@ -863,6 +1111,20 @@ pub fn refund_deposit(
 // Composed scenarios
 // ---------------------------------------------------------------------------------------------
 
+/// Requires the node to reject `transaction`, and returns the reason.
+///
+/// A tampered transaction that the node accepts would mean the attack is possible, so this is a
+/// hard failure rather than a report.
+fn expect_rejection(chain: &Chain, transaction: &Transaction, what: &str) -> Result<String> {
+    let verdict = chain.test_mempool_accept(transaction)?;
+    if verdict.allowed {
+        bail!("{what} was accepted by the node; that attack must not be possible");
+    }
+    Ok(verdict
+        .reject_reason
+        .unwrap_or_else(|| "rejected without a reason".to_string()))
+}
+
 /// Runs one named scenario against a fresh state.
 pub fn run(
     name: &str,
@@ -877,6 +1139,8 @@ pub fn run(
         "liftv2-dispute" => liftv2_dispute(chain, state, options),
         "proof-take" => proof_take(chain, state, options),
         "liftv2-refund" => liftv2_refund(chain, state, options),
+        "engine-cheat" => engine_cheat(chain, state, options),
+        "engine-offline" => engine_offline(chain, state, options),
         other => bail!(
             "unknown scenario `{other}`; known scenarios: {}",
             SCENARIOS
@@ -1139,6 +1403,338 @@ fn liftv2_refund(
             "mined_blocks": mature.mined_blocks,
             "destination": mature.destination,
             "amount_sats": mature.amount_sats,
+        }),
+    );
+
+    Ok(report)
+}
+
+/// `engine-cheat`: every way the operator or the Engine could try to move value it is not owed.
+///
+/// The honest successor is built and signed but kept in memory, so the tampered copies are tested
+/// while the deposit is still unspent. That matters: once a transaction is mined,
+/// `testmempoolaccept` reports `missing-inputs` before it reaches the script, which would make the
+/// negative test vacuous.
+fn engine_cheat(
+    chain: &Chain,
+    state: &mut State,
+    options: &ScenarioOptions,
+) -> Result<ScenarioReport> {
+    let mut report = ScenarioReport::new("engine-cheat", chain.wallet());
+
+    let deposit = fund_deposit(chain, state, options.deposit_sats)?;
+    report.step(
+        "deposit",
+        Some(Txid::from_byte_array(deposit.funding_txid.0)),
+        json!({ "value_sats": deposit.value_sats }),
+    );
+    let transition = build_transition(state, &options.transition())?;
+    report.step(
+        "transition",
+        None,
+        json!({ "statement_digest": transition.statement_digest }),
+    );
+
+    // 1 Prepare the honest successor without publishing it.
+    let prepared = prepare_successor(state)?;
+    let honest = prepared.transaction.clone();
+
+    // 2 The Engine asks Alice to co-sign a different statement commitment.
+    let mut changed_statement = honest.clone();
+    let mut flipped = prepared.manifest.statement_digest();
+    flipped[0] ^= 0x01;
+    changed_statement.output[prepared.statement_vout as usize].script_pubkey =
+        ScriptBuf::from_bytes(statement_op_return_script(flipped));
+    let reason = expect_rejection(
+        chain,
+        &changed_statement,
+        "a successor with a changed statement",
+    )?;
+    report.step(
+        "changed_statement",
+        None,
+        json!({ "rejected": true, "reason": reason }),
+    );
+
+    // 3 A payout is redirected to the other beneficiary.
+    let mut redirected = honest.clone();
+    redirected.output[0].script_pubkey = redirected.output[1].script_pubkey.clone();
+    let reason = expect_rejection(chain, &redirected, "a successor with a redirected payout")?;
+    report.step(
+        "redirected_payout",
+        None,
+        json!({ "rejected": true, "reason": reason }),
+    );
+
+    // 4 A payout is shorted by one satoshi, which would silently grow the miner fee.
+    let mut shorted = honest.clone();
+    let value = shorted.output[0]
+        .value
+        .to_sat()
+        .checked_sub(1)
+        .context("the claim is too small to short")?;
+    shorted.output[0].value = bitcoin::Amount::from_sat(value);
+    let reason = expect_rejection(chain, &shorted, "a successor with a shorted payout")?;
+    report.step(
+        "shorted_payout",
+        None,
+        json!({ "rejected": true, "reason": reason }),
+    );
+
+    // 5 Publish the honest successor, so the assertion edges have claims to attack.
+    let tree = publish_prepared(chain, state, prepared)?;
+    report.step(
+        "successor",
+        Some(Txid::from_byte_array(tree.txid.0)),
+        json!({ "claims": tree.claims.len() }),
+    );
+
+    // 6 The operator signs an assertion on the beneficiary's behalf.
+    let claim = tree.claim(0)?.clone();
+    let terms = claim.terms.to_terms();
+    let claim_prevout = TxOut {
+        value: bitcoin::Amount::from_sat(claim.amount_sats),
+        script_pubkey: claim.spk()?,
+    };
+    let forged = Assertion::new(
+        terms.clone(),
+        ContestedOutput {
+            outpoint: tree.outpoint(&claim),
+            value_sats: claim.amount_sats,
+        },
+        options.claim_fee_sats,
+    )
+    .context_debug("the forged assertion could not be built")?;
+    let forged_claim = AssertionClaim::new(
+        terms.statement_digest,
+        terms.binding_digest(),
+        terms.beneficiary_key,
+    )
+    .context_debug("the forged claim script could not be built")?;
+    let mut forged_tx = forged
+        .transaction(Witness::new())
+        .context_debug("the forged assertion transaction could not be built")?;
+    let sighash = forged_claim
+        .assert_signing_hash(&forged_tx, &claim_prevout)
+        .context_debug("the forged assertion sighash could not be computed")?;
+    forged_tx.input[0].witness = forged_claim
+        .assert_witness(signing::sign_digest(sighash, keys::OPERATOR_SECRET)?)
+        .context_debug("the forged assertion witness could not be built")?;
+    let reason = expect_rejection(chain, &forged_tx, "an assertion signed by the operator")?;
+    report.step(
+        "operator_assertion",
+        None,
+        json!({ "rejected": true, "reason": reason }),
+    );
+
+    // 7 The beneficiary publishes the honest assertion.
+    let assertion = assert_claim(chain, state, 0, options.claim_fee_sats)?;
+    report.step(
+        "assert",
+        Some(Txid::from_byte_array(assertion.txid.0)),
+        json!({ "claim_index": assertion.claim_index, "value_sats": assertion.value_sats }),
+    );
+
+    // 8 The operator takes before the challenge window.
+    let premature = take_assertion(
+        chain,
+        state,
+        options.destination.clone(),
+        options.payout_fee_sats,
+        false,
+    )?;
+    if premature.accepted {
+        bail!("a premature take was accepted by the node");
+    }
+    report.step(
+        "premature_take",
+        None,
+        json!({ "accepted": false, "reason": premature.premature_rejection }),
+    );
+
+    // 9 Mature the assertion output, so the wrong-signer check below fails on the signature and
+    //   not on the timelock.
+    let (rebuilt, stored, prevout) = stored_assertion(state)?;
+    let matured_blocks = u64::from(stored.terms.challenge_blocks);
+    let height = chain.mine(matured_blocks)?;
+    report.step(
+        "challenge_window",
+        None,
+        json!({ "mined_blocks": matured_blocks, "height": height }),
+    );
+
+    // 10 The beneficiary signs a take, which is the operator's leaf.
+    let destination = match options.destination.clone() {
+        Some(address) => address,
+        None => chain.new_address()?,
+    };
+    let destination_script = chain.script(&destination)?;
+    let anchor = AssertionAnchor::new(
+        OutPoint {
+            txid: Txid::from_byte_array(stored.txid.0),
+            vout: 0,
+        },
+        stored.value_sats,
+    );
+    let take = TakeSpend::new(
+        &rebuilt,
+        anchor,
+        destination_script.clone(),
+        options.payout_fee_sats,
+    )
+    .context_debug("the take could not be built")?;
+    let mut wrong_signer = take.transaction();
+    let sighash = take
+        .signing_hash(&prevout)
+        .context_debug("the take sighash could not be computed")?;
+    wrong_signer.input[0].witness = take
+        .witness(signing::sign_digest(sighash, keys::BOB_SECRET)?)
+        .context_debug("the take witness could not be built")?;
+    let reason = expect_rejection(chain, &wrong_signer, "a take signed by the beneficiary")?;
+    report.step(
+        "beneficiary_take",
+        None,
+        json!({ "rejected": true, "reason": reason }),
+    );
+
+    // 11 A wrong disclosure secret must not open the disprove hashlock.
+    let refusal = match DisproveSpend::new(
+        &rebuilt,
+        anchor,
+        [0x99; 32],
+        destination_script,
+        options.payout_fee_sats,
+    ) {
+        Ok(_) => bail!("a wrong disclosure secret opened the committed hashlock"),
+        Err(error) => format!("{error:?}"),
+    };
+    report.step(
+        "wrong_secret",
+        None,
+        json!({ "refused_locally": true, "reason": refusal }),
+    );
+
+    // 12 The honest operator take still settles now that the window has passed.
+    let take = take_assertion(
+        chain,
+        state,
+        options.destination.clone(),
+        options.payout_fee_sats,
+        false,
+    )?;
+    if !take.accepted {
+        bail!("the honest take did not settle after the challenge window");
+    }
+    report.step(
+        "honest_take",
+        take.txid.map(|txid| Txid::from_byte_array(txid.0)),
+        json!({
+            "destination": take.destination,
+            "amount_sats": take.amount_sats,
+            "engine_signature": false,
+        }),
+    );
+
+    Ok(report)
+}
+
+/// `engine-offline`: the Engine never signs, so the participant has only two choices.
+///
+/// The cooperative path needs both MuSig2 signers; a successor signed by the participant alone is
+/// rejected. What remains is the LiftV2 refund, and only after its relative timelock matures.
+fn engine_offline(
+    chain: &Chain,
+    state: &mut State,
+    options: &ScenarioOptions,
+) -> Result<ScenarioReport> {
+    let mut report = ScenarioReport::new("engine-offline", chain.wallet());
+
+    let deposit = fund_deposit(chain, state, options.deposit_sats)?;
+    report.step(
+        "deposit",
+        Some(Txid::from_byte_array(deposit.funding_txid.0)),
+        json!({
+            "value_sats": deposit.value_sats,
+            "refund_delay_blocks": deposit.refund_delay_blocks,
+        }),
+    );
+    let transition = build_transition(state, &options.transition())?;
+    report.step(
+        "transition",
+        None,
+        json!({ "statement_digest": transition.statement_digest }),
+    );
+
+    // 1 A successor signed by the participant alone cannot satisfy the aggregate key.
+    let manifest = transition.manifest()?;
+    let funding = SuccessorFunding::new_with_assertions(
+        &manifest,
+        DepositAnchor::new(deposit.outpoint(), deposit.value_sats),
+        transition.network_fee_reserve_sats,
+        Some(transition.fee_script()?),
+        &transition.bindings(),
+    )
+    .context_debug("the successor does not fund every manifest obligation")?;
+    let mut alone = funding.transaction();
+    let prevout = TxOut {
+        value: bitcoin::Amount::from_sat(deposit.value_sats),
+        script_pubkey: deposit.spk()?,
+    };
+    let digest = signing::key_path_sighash(&alone, 0, std::slice::from_ref(&prevout))?;
+    alone.input[0].witness =
+        Witness::from_slice(&[signing::sign_digest(digest, keys::ALICE_SECRET)?.to_vec()]);
+    let reason = expect_rejection(chain, &alone, "a successor signed by the participant alone")?;
+
+    let taproot = keys::liftv2_taproot().context("the LiftV2 taproot could not be constructed")?;
+    if signing::musig_sign(&taproot, &[keys::ALICE_SECRET], digest).is_ok() {
+        bail!("a single signer produced a MuSig2 aggregate signature");
+    }
+    report.step(
+        "participant_alone",
+        None,
+        json!({
+            "aggregate_signature": "refused locally (two signers are required)",
+            "node_rejection": reason,
+            "engine_signature": false,
+        }),
+    );
+
+    // 2 The refund is immature.
+    let premature = refund_deposit(
+        chain,
+        state,
+        options.destination.clone(),
+        options.payout_fee_sats,
+        false,
+    )?;
+    if premature.accepted {
+        bail!("the refund was accepted before the relative timelock matured");
+    }
+    report.step(
+        "refund_before_maturity",
+        None,
+        json!({ "accepted": false, "rejection": premature.rejection }),
+    );
+
+    // 3 After the timelock, the participant exits alone.
+    let mature = refund_deposit(
+        chain,
+        state,
+        options.destination.clone(),
+        options.payout_fee_sats,
+        true,
+    )?;
+    if !mature.accepted {
+        bail!("the refund was not accepted after the relative timelock matured");
+    }
+    report.step(
+        "refund_after_maturity",
+        mature.txid.map(|txid| Txid::from_byte_array(txid.0)),
+        json!({
+            "destination": mature.destination,
+            "amount_sats": mature.amount_sats,
+            "mined_blocks": mature.mined_blocks,
+            "engine_signature": false,
         }),
     );
 

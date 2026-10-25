@@ -87,6 +87,8 @@ run_cli_scenarios() {
   cargo run -q -p cube-cli -- --state target/cube-cli-cooperative.json scenario run liftv2-cooperative
   cargo run -q -p cube-cli -- --state target/cube-cli-dispute.json scenario run liftv2-dispute
   cargo run -q -p cube-cli -- --state target/cube-cli-proof.json scenario run proof-take --challenge-blocks 10
+  cargo run -q -p cube-cli -- --state target/cube-cli-cheat.json scenario run engine-cheat --challenge-blocks 10
+  cargo run -q -p cube-cli -- --state target/cube-cli-offline.json scenario run engine-offline
   cargo run -q -p cube-cli -- --state target/cube-cli-refund.json scenario run liftv2-refund
 }
 

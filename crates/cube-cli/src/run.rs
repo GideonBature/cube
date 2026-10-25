@@ -28,6 +28,12 @@ pub fn dispatch(cli: Cli) -> Result<Value> {
         Command::Transition {
             command: TransitionCommand::Show,
         } => return show_transition(&cli.state),
+        Command::Transition {
+            command: TransitionCommand::Verify,
+        } => {
+            let state = State::load(&cli.state)?;
+            return cube_scenario::scenario::verify_transition(&state);
+        }
         Command::Successor {
             command: SuccessorCommand::Show,
         } => return show_successor(&cli.state),
@@ -73,6 +79,7 @@ pub fn dispatch(cli: Cli) -> Result<Value> {
                 serde_json::to_value(&deposit)?
             }
             DepositCommand::Show => unreachable!("handled before the node is opened"),
+            DepositCommand::Verify => scenario::verify_deposit(&chain, &state)?,
         },
         Command::Transition { command } => match command {
             TransitionCommand::Build(args) => {
@@ -83,6 +90,7 @@ pub fn dispatch(cli: Cli) -> Result<Value> {
                 serde_json::to_value(&transition)?
             }
             TransitionCommand::Show => unreachable!("handled before the node is opened"),
+            TransitionCommand::Verify => unreachable!("handled before the node is opened"),
         },
         Command::Successor { command } => match command {
             SuccessorCommand::Publish => {
@@ -92,6 +100,7 @@ pub fn dispatch(cli: Cli) -> Result<Value> {
                 serde_json::to_value(&tree)?
             }
             SuccessorCommand::Show => unreachable!("handled before the node is opened"),
+            SuccessorCommand::Verify => scenario::verify_successor(&chain, &state)?,
         },
         Command::Claim { command } => match command {
             ClaimCommand::List => unreachable!("handled before the node is opened"),
