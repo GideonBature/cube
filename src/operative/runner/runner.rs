@@ -13,6 +13,10 @@ use crate::inscriptive::archival_manager::archival_manager::ArchivalManager;
 use crate::inscriptive::archival_manager::archival_manager::ARCHIVAL_MANAGER;
 use crate::inscriptive::coin_manager::coin_manager::CoinManager;
 use crate::inscriptive::coin_manager::coin_manager::COIN_MANAGER;
+use crate::inscriptive::commit_journal::commit_journal::CommitJournal;
+use crate::inscriptive::commit_journal::reconcile::{
+    reconcile_pending_commit, Reconciliation,
+};
 use crate::inscriptive::flame_manager::flame_manager::FlameManager;
 use crate::inscriptive::flame_manager::flame_manager::FLAME_MANAGER;
 use crate::inscriptive::graveyard::graveyard::Graveyard;
@@ -82,6 +86,48 @@ pub async fn run(
 
     // 4 Get the engine key and self account key.
     let (engine_key, self_account_key) = (engine_key(chain), key_holder.secp_public_key_bytes());
+
+    // 4.b Reconcile a batch commit that did not finish. This must run before any manager is
+    //     constructed: reconciliation erases and reopens the batch-derived stores.
+    match reconcile_pending_commit(chain, engine_key).await {
+        Ok(Reconciliation::NothingPending) => {}
+        Ok(Reconciliation::RolledForward {
+            height,
+            replayed_batches,
+            archived_record_inserted,
+        }) => {
+            println!(
+                "{}",
+                format!(
+                    "Recovered interrupted commit at batch #{}: replayed {} archived batch(es), archived_record_inserted={}.",
+                    height, replayed_batches, archived_record_inserted
+                )
+                .green()
+            );
+        }
+        Err(error) => {
+            eprintln!(
+                "{} {:?}",
+                "Refusing to start: an interrupted batch commit could not be reconciled."
+                    .red(),
+                error
+            );
+            return;
+        }
+    }
+
+    // 4.c Open the commit journal once; every batch-executing task shares it.
+    let commit_journal: Option<CommitJournal> = match CommitJournal::open(chain) {
+        Ok(commit_journal) => Some(commit_journal),
+        Err(error) => {
+            println!(
+                "{} {:?}",
+                "Error initializing commit journal: ".red(),
+                error
+            );
+            return;
+        }
+    };
 
     // 5 Initialize registry.
     let registry: REGISTRY = match Registry::new(chain) {
@@ -216,6 +262,7 @@ pub async fn run(
         let archival_manager = archival_manager.clone();
         let sync_manager = Arc::clone(&sync_manager);
         let utxo_set = Arc::clone(&utxo_set);
+        let commit_journal = commit_journal.clone();
         tokio::spawn(async move {
             let _ = sync_manager
                 .spawn_background_chain_syncer(
@@ -232,6 +279,7 @@ pub async fn run(
                     &params_manager,
                     &archival_manager,
                     &utxo_set,
+                    commit_journal,
                 )
                 .await;
         });
@@ -303,6 +351,7 @@ pub async fn run(
                 let params_manager = Arc::clone(&params_manager);
                 let archival_manager = archival_manager.clone();
                 let key_holder = Arc::clone(&key_holder);
+                let commit_journal = commit_journal.clone();
 
                 tokio::spawn(async move {
                     let _ = engine_batch_builder_background_task(
@@ -320,6 +369,7 @@ pub async fn run(
                         &privileges_manager,
                         &params_manager,
                         &archival_manager,
+                        commit_journal,
                     )
                     .await;
                 });
@@ -387,6 +437,7 @@ pub async fn run(
                 let privileges_manager = Arc::clone(&privileges_manager);
                 let params_manager = Arc::clone(&params_manager);
                 let archival_manager = archival_manager.clone();
+                let commit_journal = commit_journal.clone();
 
                 tokio::spawn(async move {
                     in_flight_batch_sync_background_task(
@@ -402,6 +453,7 @@ pub async fn run(
                         &privileges_manager,
                         &params_manager,
                         &archival_manager,
+                        commit_journal,
                     )
                     .await;
                 });

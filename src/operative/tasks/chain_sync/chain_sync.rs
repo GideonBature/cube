@@ -9,15 +9,19 @@ use crate::{
     executive::exec_ctx::exec_ctx::ExecCtx,
     inscriptive::{
         archival_manager::archival_manager::ARCHIVAL_MANAGER, baked,
-        coin_manager::coin_manager::COIN_MANAGER, flame_manager::flame_manager::FLAME_MANAGER,
-        graveyard::graveyard::GRAVEYARD, params_manager::params_manager::PARAMS_MANAGER,
+        coin_manager::coin_manager::COIN_MANAGER,
+        commit_journal::commit_journal::CommitJournal,
+        flame_manager::flame_manager::FLAME_MANAGER, graveyard::graveyard::GRAVEYARD,
+        params_manager::params_manager::PARAMS_MANAGER,
         privileges_manager::privileges_manager::PRIVILEGES_MANAGER, registry::registry::REGISTRY,
-        state_manager::state_manager::STATE_MANAGER, sync_manager::sync_manager::SYNC_MANAGER,
+        state_manager::state_manager::STATE_MANAGER,
+        sync_manager::sync_manager::{is_tip_reorg, SYNC_MANAGER},
         utxo_set::utxo_set::UTXO_SET,
     },
     operative::run_args::chain::Chain,
 };
 use async_trait::async_trait;
+use bitcoin::hashes::Hash;
 use bitcoin::OutPoint;
 use colored::Colorize;
 use std::sync::Arc;
@@ -46,6 +50,7 @@ pub trait ChainSync {
         params_manager: &PARAMS_MANAGER,
         archival_manager: &Option<ARCHIVAL_MANAGER>,
         utxo_set: &UTXO_SET,
+        commit_journal: Option<CommitJournal>,
     );
 
     /// Awaits the chain to be fully synced to the latest chain tip.
@@ -83,6 +88,7 @@ impl ChainSync for SYNC_MANAGER {
         params_manager: &PARAMS_MANAGER,
         archival_manager: &Option<ARCHIVAL_MANAGER>,
         utxo_set: &UTXO_SET,
+        commit_journal: Option<CommitJournal>,
     ) {
         let mut synced: bool = false;
 
@@ -232,6 +238,36 @@ impl ChainSync for SYNC_MANAGER {
                         }
                     };
 
+                    // Before scanning, check that this block builds on the exact block the node
+                    // already treated as final. A reorg below the finalized tip cannot be undone
+                    // by replaying new blocks, so the runtime stops instead of serving a state
+                    // that silently disagrees with Bitcoin.
+                    if height_to_sync == cube_node_sync_height + 1 {
+                        let stored_hash = {
+                            let _sync_manager = sync_manager.lock().await;
+                            _sync_manager.bitcoin_sync_block_hash()
+                        };
+                        if is_tip_reorg(
+                            stored_hash,
+                            Some(block.header.prev_blockhash.to_byte_array()),
+                        ) {
+                            eprintln!(
+                                "{}",
+                                format!(
+                                    "Reorg below the finalized tip: block #{} was {}, but block #{} builds on {}. Refusing to continue; restart with reconciliation.",
+                                    height_to_sync - 1,
+                                    bitcoin::BlockHash::from_byte_array(
+                                        stored_hash.expect("a mismatch requires a stored hash")
+                                    ),
+                                    height_to_sync,
+                                    block.header.prev_blockhash,
+                                )
+                                .red()
+                            );
+                            std::process::exit(2);
+                        }
+                    }
+
                     // Scan block..
                     for transaction in block.txdata.iter() {
                         let inputs = transaction.input.clone();
@@ -306,6 +342,7 @@ impl ChainSync for SYNC_MANAGER {
                                 Arc::clone(privileges_manager),
                                 Arc::clone(params_manager),
                                 archival_manager.clone(),
+                                commit_journal.clone(),
                             );
 
                             let execute_batch_result = {
@@ -357,10 +394,13 @@ impl ChainSync for SYNC_MANAGER {
                         }
                     }
 
-                    // Set the new bitcoin sync height tip.
+                    // Set the new bitcoin sync tip: height plus the hash at that height.
                     {
                         let mut _sync_manager = sync_manager.lock().await;
-                        _sync_manager.set_bitcoin_sync_height_tip(height_to_sync);
+                        _sync_manager.set_bitcoin_sync_tip(
+                            height_to_sync,
+                            block.block_hash().to_byte_array(),
+                        );
                     }
 
                     // TODO set the new rollup sync height.

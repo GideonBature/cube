@@ -50,6 +50,12 @@ const PACKAGE_EXPIRY_BLOCKS: u64 = 432;
 /// The recovery package's recorded fee rate, sat/vB.
 const PACKAGE_FEE_RATE: u64 = 10;
 
+/// The dust threshold for a P2TR output at Bitcoin Core's default dust relay fee.
+///
+/// A rate-based cooperative settlement funds a standalone P2TR input whose whole value is the
+/// miner fee. Below this value the wallet refuses to create the input, so the fee must be raised.
+const MIN_P2TR_FEE_INPUT_SATS: u64 = 330;
+
 /// The name and one-line description of every scenario.
 pub const SCENARIOS: [(&str, &str); 7] = [
     (
@@ -187,6 +193,10 @@ pub struct SettlementOutcome {
     pub txid: Hex32,
     /// The miner fee the external input paid.
     pub miner_fee_sats: u64,
+    /// The settlement transaction virtual size.
+    pub vsize_vbytes: u64,
+    /// The realised fee rate, sat/vB.
+    pub fee_rate_sat_per_vb: f64,
     /// The payouts, in claim order.
     pub payouts: Vec<Payout>,
 }
@@ -299,6 +309,69 @@ fn cost_of(gross_value_sats: u64, miner_fee_sats: u64, transaction: &Transaction
         net_payout_sats: gross_value_sats.saturating_sub(miner_fee_sats),
         vsize_vbytes,
         fee_rate_sat_per_vb,
+    }
+}
+
+/// How a step's miner fee is chosen.
+#[derive(Debug, Clone, Copy)]
+pub enum FeeSpec {
+    /// A fixed satoshi amount.
+    Sats(u64),
+    /// A target rate in sat/vB; the fee is `ceil(rate * vsize)`.
+    Rate(f64),
+}
+
+impl From<u64> for FeeSpec {
+    fn from(sats: u64) -> Self {
+        FeeSpec::Sats(sats)
+    }
+}
+
+/// How a cooperative settlement's miner fee is chosen.
+#[derive(Debug, Clone, Copy)]
+pub enum SettlementFee {
+    /// The whole value of the external fee input.
+    Input(u64),
+    /// A target rate; the external input is funded with `ceil(rate * vsize)`.
+    Rate(f64),
+}
+
+impl From<u64> for SettlementFee {
+    fn from(sats: u64) -> Self {
+        SettlementFee::Input(sats)
+    }
+}
+
+/// Resolves a fee against a builder that returns the signed transaction's vsize.
+///
+/// A rate is iterated at most three times: the first pass measures, the next sets the fee, and a
+/// final pass catches a value-varint change. In practice the size is stable after one iteration.
+fn resolve_fee<F>(spec: FeeSpec, mut vsize_for: F) -> Result<u64>
+where
+    F: FnMut(u64) -> Result<u64>,
+{
+    match spec {
+        FeeSpec::Sats(sats) => Ok(sats),
+        FeeSpec::Rate(rate) => {
+            if !rate.is_finite() || rate <= 0.0 {
+                bail!("the fee rate must be a positive sat/vB value");
+            }
+            let mut fee = 0u64;
+            let mut vsize = vsize_for(fee)?;
+            for _ in 0..3 {
+                let next = (rate * vsize as f64).ceil();
+                if !next.is_finite() || next < 0.0 || next > u64::MAX as f64 {
+                    bail!("the fee rate overflows the satoshi amount");
+                }
+                let next = next as u64;
+                if next == fee {
+                    return Ok(fee);
+                }
+                fee = next;
+                vsize = vsize_for(fee)?;
+            }
+            Ok(fee)
+        }
     }
 }
 
@@ -708,13 +781,72 @@ pub fn verify_successor(chain: &Chain, state: &State) -> Result<serde_json::Valu
     }))
 }
 
+/// Measures the signed settlement and returns the fee a target rate requires.
+///
+/// The transaction is built over a zero-value dummy P2TR fee input and signed for real; only the
+/// fee input's signature bytes are a placeholder, because a P2TR key-path signature is always 64
+/// bytes. Changing the input's value does not change the serialized transaction, so the measured
+/// vsize is the one the funded settlement will have.
+fn quote_settlement_fee(
+    manifest: &TransitionManifest,
+    packages: &[ClaimRecoveryPackage],
+    scripts: &[ScriptBuf],
+    tree: &Tree,
+    rate: f64,
+) -> Result<u64> {
+    if !rate.is_finite() || rate <= 0.0 {
+        bail!("the fee rate must be a positive sat/vB value");
+    }
+    let dummy_outpoint = OutPoint {
+        txid: Txid::from_byte_array([0xee; 32]),
+        vout: 0,
+    };
+    let dummy_prevout = TxOut {
+        value: bitcoin::Amount::from_sat(0),
+        script_pubkey: keys::p2tr_script(keys::xonly(keys::ALICE_SECRET)),
+    };
+    let settlement = CooperativeSettle::new(
+        manifest,
+        packages,
+        scripts.to_vec(),
+        dummy_outpoint,
+        &dummy_prevout,
+        FeeBounds::new(0, 0),
+    )
+    .context_debug("the settlement quote could not be built")?;
+    let mut transaction = settlement.transaction();
+    let mut prevouts = settlement
+        .claim_prevouts()
+        .context_debug("the settlement quote prevouts")?;
+    prevouts.push(dummy_prevout);
+    for (index, claim) in tree.claims.iter().enumerate() {
+        let secret = keys::secret_for_xonly(claim.beneficiary_key.0)
+            .context("the claim beneficiary is not a fixture key")?;
+        let sighash = settlement
+            .claim_signing_hash(index, &prevouts)
+            .context_debug("the settlement quote claim sighash")?;
+        transaction.input[index].witness = settlement
+            .claim_witness(index, signing::sign_digest(sighash, secret)?)
+            .context_debug("the settlement quote claim witness")?;
+    }
+    // The funded fee input carries one 64-byte P2TR signature.
+    transaction.input[packages.len()].witness = Witness::from_slice(&[vec![0u8; 64]]);
+    let vsize = transaction.vsize() as u64;
+    let fee = (rate * vsize as f64).ceil();
+    if !fee.is_finite() || fee <= 0.0 || fee > u64::MAX as f64 {
+        bail!("the fee rate overflows the satoshi amount");
+    }
+    Ok(fee as u64)
+}
+
 /// Spends every claim in one cooperative settlement.
 pub fn settle_claims(
     chain: &Chain,
     state: &mut State,
     destinations: Option<Vec<String>>,
-    fee_input_sats: u64,
+    fee: impl Into<SettlementFee>,
 ) -> Result<SettlementOutcome> {
+    let fee = fee.into();
     let tree = state.require_tree()?.clone();
     let transition = state.require_transition()?.clone();
     let manifest = transition.manifest()?;
@@ -748,9 +880,26 @@ pub fn settle_claims(
         .map(|address| chain.script(address))
         .collect::<Result<_>>()?;
 
-    // 3 A local key-path P2TR input pays the miner fee; its whole value is the fee.
-    let (fee_outpoint, fee_prevout) =
-        chain.fund_p2tr(keys::xonly(keys::ALICE_SECRET), fee_input_sats)?;
+    // 3 A local key-path P2TR input pays the miner fee; its whole value is the fee. With a rate,
+    //   the input is funded with exactly the fee the signed transaction needs.
+    let (fee_outpoint, fee_prevout, fee_input_sats) = match fee {
+        SettlementFee::Input(sats) => {
+            let (outpoint, prevout) = chain.fund_p2tr(keys::xonly(keys::ALICE_SECRET), sats)?;
+            (outpoint, prevout, sats)
+        }
+        SettlementFee::Rate(rate) => {
+            let fee_sats = quote_settlement_fee(&manifest, &packages, &scripts, &tree, rate)?;
+            if fee_sats < MIN_P2TR_FEE_INPUT_SATS {
+                bail!(
+                    "a {rate} sat/vB settlement fee is {fee_sats} sats, below the \
+                     {MIN_P2TR_FEE_INPUT_SATS}-sat P2TR dust threshold; use a higher rate or \
+                     --fee-input-sats"
+                );
+            }
+            let (outpoint, prevout) = chain.fund_p2tr(keys::xonly(keys::ALICE_SECRET), fee_sats)?;
+            (outpoint, prevout, fee_sats)
+        }
+    };
 
     let settlement = CooperativeSettle::new(
         &manifest,
@@ -831,6 +980,12 @@ pub fn settle_claims(
     Ok(SettlementOutcome {
         txid: Hex::new(txid.to_byte_array()),
         miner_fee_sats: fee_input_sats,
+        vsize_vbytes: transaction.vsize() as u64,
+        fee_rate_sat_per_vb: if transaction.vsize() == 0 {
+            0.0
+        } else {
+            fee_input_sats as f64 / transaction.vsize() as f64
+        },
         payouts,
     })
 }
@@ -840,7 +995,7 @@ pub fn assert_claim(
     chain: &Chain,
     state: &mut State,
     claim_index: usize,
-    fee_sats: u64,
+    fee: impl Into<FeeSpec>,
 ) -> Result<AssertOutcome> {
     let tree = state.require_tree()?.clone();
     let claim = tree.claim(claim_index)?.clone();
@@ -849,16 +1004,10 @@ pub fn assert_claim(
         value: bitcoin::Amount::from_sat(claim.amount_sats),
         script_pubkey: claim.spk()?,
     };
-
-    let assertion = Assertion::new(
-        terms.clone(),
-        ContestedOutput {
-            outpoint: tree.outpoint(&claim),
-            value_sats: claim.amount_sats,
-        },
-        fee_sats,
-    )
-    .context_debug("the assertion does not hold")?;
+    let contested = ContestedOutput {
+        outpoint: tree.outpoint(&claim),
+        value_sats: claim.amount_sats,
+    };
 
     // The claim output must be the two-leaf claim these terms define.
     let assertion_claim = AssertionClaim::new(
@@ -874,18 +1023,28 @@ pub fn assert_claim(
     {
         bail!("the claim output does not match the terms being asserted");
     }
-
-    let mut transaction = assertion
-        .transaction(Witness::new())
-        .context_debug("the assertion transaction")?;
-    let sighash = assertion_claim
-        .assert_signing_hash(&transaction, &claim_prevout)
-        .context_debug("the assertion sighash")?;
     let secret = keys::secret_for_xonly(terms.beneficiary_key)
         .context("the claim beneficiary is not a fixture key")?;
-    transaction.input[0].witness = assertion_claim
-        .assert_witness(signing::sign_digest(sighash, secret)?)
-        .context_debug("the assertion witness")?;
+
+    // Build and sign with a candidate fee, so a rate can be resolved against the real vsize.
+    let build = |fee_sats: u64| -> Result<(Assertion, Transaction)> {
+        let assertion = Assertion::new(terms.clone(), contested, fee_sats)
+            .context_debug("the assertion does not hold")?;
+        let mut transaction = assertion
+            .transaction(Witness::new())
+            .context_debug("the assertion transaction")?;
+        let sighash = assertion_claim
+            .assert_signing_hash(&transaction, &claim_prevout)
+            .context_debug("the assertion sighash")?;
+        transaction.input[0].witness = assertion_claim
+            .assert_witness(signing::sign_digest(sighash, secret)?)
+            .context_debug("the assertion witness")?;
+        Ok((assertion, transaction))
+    };
+    let fee_sats = resolve_fee(fee.into(), |candidate| {
+        Ok(build(candidate)?.1.vsize() as u64)
+    })?;
+    let (assertion, transaction) = build(fee_sats)?;
 
     chain
         .test_mempool_accept(&transaction)?
@@ -944,7 +1103,7 @@ pub fn take_assertion(
     chain: &Chain,
     state: &mut State,
     destination: Option<String>,
-    fee_sats: u64,
+    fee: impl Into<FeeSpec>,
     wait_for_window: bool,
 ) -> Result<TakeOutcome> {
     let (assertion, stored, prevout) = stored_assertion(state)?;
@@ -960,15 +1119,23 @@ pub fn take_assertion(
         },
         stored.value_sats,
     );
-    let spend = TakeSpend::new(&assertion, anchor, destination_script, fee_sats)
-        .context_debug("the take spend does not hold")?;
-    let mut transaction = spend.transaction();
-    let sighash = spend
-        .signing_hash(&prevout)
-        .context_debug("the take sighash")?;
-    transaction.input[0].witness = spend
-        .witness(signing::sign_digest(sighash, keys::OPERATOR_SECRET)?)
-        .context_debug("the take witness")?;
+    // Build and sign with a candidate fee, so a rate can be resolved against the real vsize.
+    let build = |fee_sats: u64| -> Result<(TakeSpend, Transaction)> {
+        let spend = TakeSpend::new(&assertion, anchor, destination_script.clone(), fee_sats)
+            .context_debug("the take spend does not hold")?;
+        let mut transaction = spend.transaction();
+        let sighash = spend
+            .signing_hash(&prevout)
+            .context_debug("the take sighash")?;
+        transaction.input[0].witness = spend
+            .witness(signing::sign_digest(sighash, keys::OPERATOR_SECRET)?)
+            .context_debug("the take witness")?;
+        Ok((spend, transaction))
+    };
+    let fee_sats = resolve_fee(fee.into(), |candidate| {
+        Ok(build(candidate)?.1.vsize() as u64)
+    })?;
+    let (spend, transaction) = build(fee_sats)?;
 
     // The pre-window rejection is the timelock working; keep its reason for the report.
     let verdict = chain.test_mempool_accept(&transaction)?;
@@ -1012,7 +1179,7 @@ pub fn disprove_assertion(
     state: &mut State,
     destination: Option<String>,
     secret: [u8; 32],
-    fee_sats: u64,
+    fee: impl Into<FeeSpec>,
 ) -> Result<DisproveOutcome> {
     let (assertion, stored, prevout) = stored_assertion(state)?;
     let destination = match destination {
@@ -1027,17 +1194,31 @@ pub fn disprove_assertion(
         },
         stored.value_sats,
     );
-    let spend = DisproveSpend::new(&assertion, anchor, secret, destination_script, fee_sats)
-        .context_debug("the disclosure secret does not open the committed hashlock")?;
-    let mut transaction = spend.transaction();
-    let sighash = spend
-        .signing_hash(&prevout)
-        .context_debug("the disprove sighash")?;
     let beneficiary = keys::secret_for_xonly(stored.terms.beneficiary_key.0)
         .context("the assertion beneficiary is not a fixture key")?;
-    transaction.input[0].witness = spend
-        .witness(signing::sign_digest(sighash, beneficiary)?)
-        .context_debug("the disprove witness")?;
+    // Build and sign with a candidate fee, so a rate can be resolved against the real vsize.
+    let build = |fee_sats: u64| -> Result<(DisproveSpend, Transaction)> {
+        let spend = DisproveSpend::new(
+            &assertion,
+            anchor,
+            secret,
+            destination_script.clone(),
+            fee_sats,
+        )
+        .context_debug("the disclosure secret does not open the committed hashlock")?;
+        let mut transaction = spend.transaction();
+        let sighash = spend
+            .signing_hash(&prevout)
+            .context_debug("the disprove sighash")?;
+        transaction.input[0].witness = spend
+            .witness(signing::sign_digest(sighash, beneficiary)?)
+            .context_debug("the disprove witness")?;
+        Ok((spend, transaction))
+    };
+    let fee_sats = resolve_fee(fee.into(), |candidate| {
+        Ok(build(candidate)?.1.vsize() as u64)
+    })?;
+    let (spend, transaction) = build(fee_sats)?;
 
     chain
         .test_mempool_accept(&transaction)?
@@ -1057,7 +1238,7 @@ pub fn recover_claim(
     state: &mut State,
     claim_index: usize,
     destination: Option<String>,
-    fee_sats: u64,
+    fee: impl Into<FeeSpec>,
 ) -> Result<RecoveryOutcome> {
     let tree = state.require_tree()?.clone();
     let claim = tree.claim(claim_index)?.clone();
@@ -1075,15 +1256,28 @@ pub fn recover_claim(
         None => chain.new_address()?,
     };
     let destination_script = chain.script(&destination)?;
-    let recovery = ClaimRecovery::new(&package, &claim_prevout, destination_script, fee_sats)
-        .context_debug("the claim is not recoverable from its package")?;
-    let mut transaction = recovery.transaction();
-    let sighash = recovery
-        .signing_hash(&claim_prevout)
-        .context_debug("the recovery sighash")?;
     let secret = keys::secret_for_xonly(claim.beneficiary_key.0)
         .context("the claim beneficiary is not a fixture key")?;
-    transaction.input[0].witness = recovery.witness(signing::sign_digest(sighash, secret)?);
+    // Build and sign with a candidate fee, so a rate can be resolved against the real vsize.
+    let build = |fee_sats: u64| -> Result<(ClaimRecovery, Transaction)> {
+        let recovery = ClaimRecovery::new(
+            &package,
+            &claim_prevout,
+            destination_script.clone(),
+            fee_sats,
+        )
+        .context_debug("the claim is not recoverable from its package")?;
+        let mut transaction = recovery.transaction();
+        let sighash = recovery
+            .signing_hash(&claim_prevout)
+            .context_debug("the recovery sighash")?;
+        transaction.input[0].witness = recovery.witness(signing::sign_digest(sighash, secret)?);
+        Ok((recovery, transaction))
+    };
+    let fee_sats = resolve_fee(fee.into(), |candidate| {
+        Ok(build(candidate)?.1.vsize() as u64)
+    })?;
+    let (recovery, transaction) = build(fee_sats)?;
 
     chain
         .test_mempool_accept(&transaction)?
@@ -1103,7 +1297,7 @@ pub fn refund_deposit(
     chain: &Chain,
     state: &mut State,
     destination: Option<String>,
-    fee_sats: u64,
+    fee: impl Into<FeeSpec>,
     mine_past_maturity: bool,
 ) -> Result<RefundOutcome> {
     let deposit = state.require_deposit()?.clone();
@@ -1116,15 +1310,20 @@ pub fn refund_deposit(
         Some(address) => address,
         None => chain.new_address()?,
     };
-    let transaction = signing::refund_transaction(
-        &taproot,
-        deposit.outpoint(),
-        &prevout,
-        chain.script(&destination)?,
-        deposit.refund_delay_blocks,
-        fee_sats,
-        keys::ALICE_SECRET,
-    )?;
+    let destination_script = chain.script(&destination)?;
+    let build = |fee_sats: u64| -> Result<Transaction> {
+        signing::refund_transaction(
+            &taproot,
+            deposit.outpoint(),
+            &prevout,
+            destination_script.clone(),
+            deposit.refund_delay_blocks,
+            fee_sats,
+            keys::ALICE_SECRET,
+        )
+    };
+    let fee_sats = resolve_fee(fee.into(), |candidate| Ok(build(candidate)?.vsize() as u64))?;
+    let transaction = build(fee_sats)?;
 
     // The first attempt is expected to be non-final on a fresh deposit. That rejection is the
     // observation, not a failure.

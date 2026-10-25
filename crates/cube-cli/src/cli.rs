@@ -217,6 +217,9 @@ pub struct RecoverArgs {
     /// The miner fee in satoshis.
     #[arg(long, default_value_t = 1_000)]
     pub fee_sats: u64,
+    /// The fee rate in sat/vB. Overrides --fee-sats when set.
+    #[arg(long)]
+    pub fee_rate: Option<f64>,
 }
 
 /// Parameters of a cooperative settlement.
@@ -228,6 +231,9 @@ pub struct SettleArgs {
     /// The value of the external fee input, which becomes the miner fee.
     #[arg(long, default_value_t = 2_000)]
     pub fee_input_sats: u64,
+    /// The fee rate in sat/vB. Overrides --fee-input-sats when set.
+    #[arg(long)]
+    pub fee_rate: Option<f64>,
 }
 
 /// Assertion operations.
@@ -250,6 +256,9 @@ pub struct AssertArgs {
     /// The miner fee in satoshis.
     #[arg(long, default_value_t = 1_000)]
     pub fee_sats: u64,
+    /// The fee rate in sat/vB. Overrides --fee-sats when set.
+    #[arg(long)]
+    pub fee_rate: Option<f64>,
 }
 
 /// Parameters of a take.
@@ -261,6 +270,9 @@ pub struct TakeArgs {
     /// The miner fee in satoshis.
     #[arg(long, default_value_t = 500)]
     pub fee_sats: u64,
+    /// The fee rate in sat/vB. Overrides --fee-sats when set.
+    #[arg(long)]
+    pub fee_rate: Option<f64>,
     /// Mine the challenge window instead of reporting the premature rejection.
     #[arg(long)]
     pub wait: bool,
@@ -275,6 +287,9 @@ pub struct DisproveArgs {
     /// The miner fee in satoshis.
     #[arg(long, default_value_t = 500)]
     pub fee_sats: u64,
+    /// The fee rate in sat/vB. Overrides --fee-sats when set.
+    #[arg(long)]
+    pub fee_rate: Option<f64>,
     /// The disclosure secret, hex. Defaults to the fixture committed by the terms.
     #[arg(long)]
     pub secret: Option<String>,
@@ -304,6 +319,9 @@ pub struct RefundArgs {
     /// The miner fee in satoshis.
     #[arg(long, default_value_t = 500)]
     pub fee_sats: u64,
+    /// The fee rate in sat/vB. Overrides --fee-sats when set.
+    #[arg(long)]
+    pub fee_rate: Option<f64>,
     /// Mine past the relative timelock and publish the mature refund.
     #[arg(long)]
     pub mine_past_maturity: bool,

@@ -13,6 +13,7 @@ use crate::constructive::txout_types::projector::projector::Projector;
 use crate::executive::exec_ctx::errors::batch_execution_error::BatchExecutionError;
 use crate::inscriptive::archival_manager::archival_manager::ARCHIVAL_MANAGER;
 use crate::inscriptive::coin_manager::coin_manager::COIN_MANAGER;
+use crate::inscriptive::commit_journal::commit_journal::CommitJournal;
 use crate::inscriptive::flame_manager::flame_manager::FLAME_MANAGER;
 use crate::inscriptive::graveyard::graveyard::GRAVEYARD;
 use crate::inscriptive::params_manager::params_manager::PARAMS_MANAGER;
@@ -37,8 +38,26 @@ use crate::{
 };
 use bit_vec::BitVec;
 use bitcoin::OutPoint;
+use std::sync::atomic::{AtomicU8, Ordering};
 use std::sync::Arc;
 use tokio::sync::Mutex;
+
+/// Test-only fault injection for the multi-store commit sequence.
+///
+/// Zero disables it. A value in `1..=6` fails after the n-th manager applied, 7 after the sync
+/// tips, and 8 after the utxo removal. Integration tests use it to stop inside `apply_changes` and
+/// then restart from the same stores. It is always compiled so integration tests can reach it,
+/// and costs one relaxed load per step.
+#[doc(hidden)]
+pub static APPLY_CHANGES_FAILPOINT: AtomicU8 = AtomicU8::new(0);
+
+/// Returns an injected fault when the failpoint matches this step.
+fn injection_point(step: u8) -> Result<(), ApplyChangesError> {
+    if APPLY_CHANGES_FAILPOINT.load(Ordering::Relaxed) == step {
+        return Err(ApplyChangesError::InjectedFault(step));
+    }
+    Ok(())
+}
 
 /// `ExecCtx` contains a set of executed entries.
 pub struct ExecCtx {
@@ -74,6 +93,13 @@ pub struct ExecCtx {
 
     /// Optional append-only archival store for full batch history (`ResourceMode::Archival`).
     pub archival_manager: Option<ARCHIVAL_MANAGER>,
+
+    /// Optional durable write-ahead journal for the multi-store commit.
+    pub commit_journal: Option<CommitJournal>,
+
+    /// Replay mode: reconciliation re-executes archived batches and must not journal or archive
+    /// them again.
+    replaying: bool,
 }
 
 /// Guarded `ExecCtx`.
@@ -94,6 +120,7 @@ impl ExecCtx {
         privileges_manager: PRIVILEGES_MANAGER,
         params_manager: PARAMS_MANAGER,
         archival_manager: Option<ARCHIVAL_MANAGER>,
+        commit_journal: Option<CommitJournal>,
     ) -> EXEC_CTX {
         // 1 Initialize the `ExecCtx`.
         let exec_ctx = ExecCtx {
@@ -108,10 +135,17 @@ impl ExecCtx {
             privileges_manager,
             _params_manager: params_manager,
             archival_manager,
+            commit_journal,
+            replaying: false,
         };
 
         // 2 Return the guarded `ExecCtx`.
         Arc::new(Mutex::new(exec_ctx))
+    }
+
+    /// Puts the context in replay mode (reconciliation only).
+    pub fn set_replaying(&mut self, replaying: bool) {
+        self.replaying = replaying;
     }
 
     /// Prepares the `ExecCtx` prior to each execution.
@@ -217,6 +251,27 @@ impl ExecCtx {
     ///
     /// Called at the end of `execute_batch` only.
     async fn apply_changes(&mut self, batch_record: &BatchRecord) -> Result<(), ApplyChangesError> {
+        // 0 Before any manager mutates: record the intent durably and archive the record.
+        //
+        // The journal is what makes an interrupted commit recoverable: a restart replays the
+        // archived batches up to this height instead of guessing which managers committed. The
+        // archive has to happen here, before the managers, for the same reason.
+        if !self.replaying {
+            if let Some(journal) = self.commit_journal.as_ref() {
+                journal
+                    .begin(batch_record)
+                    .map_err(ApplyChangesError::CommitJournalBeginError)?;
+            }
+
+            if let Some(archival_manager) = self.archival_manager.as_ref() {
+                archival_manager
+                    .lock()
+                    .await
+                    .insert_batch_record(batch_record.clone())
+                    .map_err(ApplyChangesError::ArchivalManagerInsertBatchRecordError)?;
+            }
+        }
+
         // 1 Get the new batch height.
         let new_batch_height = batch_record.batch_container.batch_height();
 
@@ -250,6 +305,7 @@ impl ExecCtx {
                 return Err(ApplyChangesError::FlameManagerApplyChangesError(error));
             }
         }
+        self.after_manager("flame", 1)?;
 
         // 7 Apply changes to the coin manager.
         {
@@ -261,6 +317,7 @@ impl ExecCtx {
                 return Err(ApplyChangesError::CoinManagerApplyChangesError(error));
             }
         }
+        self.after_manager("coin", 2)?;
 
         // 8 Apply changes to the graveyard.
         {
@@ -272,6 +329,7 @@ impl ExecCtx {
                 return Err(ApplyChangesError::GraveyardApplyChangesError(error));
             }
         }
+        self.after_manager("graveyard", 3)?;
 
         // 9 Apply changes to the registry.
         {
@@ -283,6 +341,7 @@ impl ExecCtx {
                 return Err(ApplyChangesError::RegistryApplyChangesError(error));
             }
         }
+        self.after_manager("registry", 4)?;
 
         // 10 Apply changes to the state manager.
         {
@@ -294,6 +353,7 @@ impl ExecCtx {
                 return Err(ApplyChangesError::StateManagerApplyChangesError(error));
             }
         }
+        self.after_manager("state", 5)?;
 
         // 11 Apply changes to the privileges manager.
         {
@@ -302,6 +362,7 @@ impl ExecCtx {
                 return Err(ApplyChangesError::PrivilegesManagerApplyChangesError(error));
             }
         }
+        self.after_manager("privileges", 6)?;
 
         // 12 Update tips in the sync manager.
         {
@@ -314,6 +375,7 @@ impl ExecCtx {
             // 12.3 Update the payload tip.
             _sync_manager.set_payload_tip(new_payload);
         }
+        self.inject(7)?;
 
         // 13 Safe-remove spent lift tx inputs from the utxo set (as this may be in-flight execution).
         {
@@ -323,14 +385,16 @@ impl ExecCtx {
             // 13.2 Safe-remove spent lift tx inputs from the utxo set.
             _utxo_set.safe_remove_utxos(spent_bitcoin_tx_inputs);
         }
+        self.inject(8)?;
 
-        // 14 Insert the batch record into the archival manager.
-        if let Some(archival_manager) = self.archival_manager.as_ref() {
-            archival_manager
-                .lock()
-                .await
-                .insert_batch_record(batch_record.clone())
-                .map_err(ApplyChangesError::ArchivalManagerInsertBatchRecordError)?;
+        // 14 Close the commit intent. Everything durable is in place, so a restart after this
+        //    point sees a finished commit instead of replaying it.
+        if !self.replaying {
+            if let Some(journal) = self.commit_journal.as_ref() {
+                journal
+                    .finish(new_batch_height)
+                    .map_err(ApplyChangesError::CommitJournalFinishError)?;
+            }
         }
 
         // 15 Flush the changes.
@@ -342,11 +406,43 @@ impl ExecCtx {
         Ok(())
     }
 
+    /// Records manager progress and honours the test failpoint after a manager applied.
+    fn after_manager(&self, manager: &str, step: u8) -> Result<(), ApplyChangesError> {
+        if self.replaying {
+            return Ok(());
+        }
+        if let Some(journal) = self.commit_journal.as_ref() {
+            journal.note_manager(manager);
+        }
+        injection_point(step)
+    }
+
+    /// Honours the test failpoint at a non-manager step.
+    fn inject(&self, step: u8) -> Result<(), ApplyChangesError> {
+        if self.replaying {
+            return Ok(());
+        }
+        injection_point(step)
+    }
+
     /// Executes a batch.
     pub async fn execute_batch(
         &mut self,
         batch_container: &BatchContainer,
     ) -> Result<BatchRecord, BatchExecutionError> {
+        // 0 A commit that did not finish must be reconciled before another batch runs; applying
+        //   on top of a torn commit would double-apply whichever managers had already committed.
+        if !self.replaying {
+            if let Some(journal) = self.commit_journal.as_ref() {
+                if let Some(pending) = journal
+                    .pending()
+                    .map_err(BatchExecutionError::CommitJournalError)?
+                {
+                    return Err(BatchExecutionError::UnreconciledCommit(pending.height));
+                }
+            }
+        }
+
         // 1 Get the batch height.
         let new_batch_height = batch_container.batch_height();
 

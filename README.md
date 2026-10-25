@@ -97,6 +97,16 @@ proving stack:
 cargo test --release -p cube-scenario --features proof --test engine_proof -- --ignored
 ```
 
+A batch commit spans six Sled stores that cannot share a transaction. The Engine journals the batch
+before the first store changes; if the process stops inside the commit, the next start replays the
+archived batches and refuses to apply anything until it has. A reorg below the finalized tip halts
+the runtime rather than un-applying committed batches:
+
+```sh
+cargo test --test commit_recovery
+cargo test -p cube --lib sync_manager::tests
+```
+
 ## License
 
 This project is licensed under the CC0 1.0 Universal License. See the `LICENSE` file for details.

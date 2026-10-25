@@ -6,7 +6,7 @@ a real Bitcoin Core regtest node, plus the in-process suites for the parts the n
 Two commands reproduce the whole document:
 
 ```sh
-./scripts/regtest.sh cli   # the six Bitcoin-graph scenarios (about 3 minutes)
+./scripts/regtest.sh cli   # the seven Bitcoin-graph scenarios (about 3 minutes)
 ./scripts/regtest.sh all   # the node-backed test files plus the release proof test
 ```
 
@@ -60,8 +60,9 @@ The table is deliberately blunt.
 | BIP-340 inside the proof relation | none | **not implemented** (`BIND-01`) |
 | Unilateral operator assertion without the beneficiary | none | **not implemented** (`BIND-01`) |
 | Data availability of the table and authenticated input | none | **commitments only** (`DA-01`) |
-| Reorg, crash during `apply_changes`, restart reconciliation | none | **not covered** |
-| Fee policy from a fee rate | caller-supplied bounds only | **policy gap** |
+| Crash during `apply_changes`, restart reconciliation | `tests/commit_recovery.rs` | implemented, in-process suite |
+| Reorg below the finalized tip | `sync_manager` unit tests; chain sync halt | implemented (halt, not rollback) |
+| Fee policy from a fee rate | `--fee-rate` on `assert`/`take`/`disprove`/`recover`/`refund`/`settle` | implemented, vsize-derived |
 
 ### What the composed run settles, and what is still open
 
@@ -105,7 +106,8 @@ These are representation and harness tasks on top of implemented components.
 - **In-circuit BIP-340** is not implemented; authorization is graph-enforced (specification §8.2).
 - **Data availability** of the table and the authenticated input is not implemented; the chain
   carries commitments only (`DA-01`).
-- **Production setup, reorg/crash recovery, fee policy and admission limits** are open.
+- **Production setup, admission limits and reorg healing** are open. A reorg below the
+  finalized tip halts the runtime instead of un-applying committed Cube batches.
 
 Everything in stages 1–11 is executed by the CLI against Bitcoin Core. Nothing is a paper claim.
 
@@ -381,6 +383,10 @@ cube --state target/e2e/deposit.json claim settle \
 Every beneficiary signs the whole settlement (`SIGHASH_ALL`), so redirecting one output invalidates
 the other signature. The settlement spends every claim, so nothing is left for a second settlement.
 
+`claim settle --fee-rate <sat/vB>` measures the signed settlement and funds the external fee input
+with exactly `ceil(rate * vsize)`. The input must be at least 330 sats (the P2TR dust threshold), so
+a very low rate is refused with a clear message; use `--fee-input-sats` for a fixed value.
+
 Confirm the tree is gone:
 
 ```sh
@@ -517,9 +523,38 @@ fee, the net payout, the transaction virtual size and the realised fee rate. For
 }
 ```
 
-The fee is a caller-supplied satoshi amount, not a fee-rate calculation; `fee_rate_sat_per_vb` is
-the *realised* rate, so a reviewer can see whether the chosen fee is sane. Deriving the fee from a
-target rate is the open fee-policy gap.
+The fee is a caller-supplied satoshi amount; `fee_rate_sat_per_vb` is the *realised* rate. With
+`--fee-rate`, the CLI derives the amount from the signed vsize instead.
+
+**Rate-based fees.** Every step also accepts `--fee-rate` instead of `--fee-sats`. The CLI builds
+and signs the transaction, measures its vsize, and sets the fee to `ceil(rate * vsize)`:
+
+```sh
+cube --state target/e2e/rate.json deposit fund --sats 500000 >/dev/null
+cube --state target/e2e/rate.json transition build --challenge-blocks 10 >/dev/null
+cube --state target/e2e/rate.json successor publish >/dev/null
+
+cube --state target/e2e/rate.json assertion assert 1 --fee-rate 2.0 \
+  | jq -e '.cost.miner_fee_sats == 308 and .cost.fee_rate_sat_per_vb == 2.0'
+cube --state target/e2e/rate.json assertion disprove --fee-rate 1.5 \
+  | jq -e '.cost.miner_fee_sats == 225 and .cost.fee_rate_sat_per_vb == 1.5'
+cube --state target/e2e/rate.json claim recover 0 --fee-rate 3.0 \
+  | jq -e '.cost.miner_fee_sats == 399 and .cost.fee_rate_sat_per_vb == 3.0'
+```
+
+A settlement needs both claims unspent, so run it on a fresh flow:
+
+```sh
+cube --state target/e2e/rate-settle.json deposit fund --sats 500000 >/dev/null
+cube --state target/e2e/rate-settle.json transition build >/dev/null
+cube --state target/e2e/rate-settle.json successor publish >/dev/null
+cube --state target/e2e/rate-settle.json claim settle --fee-rate 2.0 \
+  | jq -e '.miner_fee_sats == 626 and .vsize_vbytes == 313'
+```
+
+The measured values are the fixture's: 154 vB for `Assert`, 150 vB for `Disprove`, 133 vB for a
+recovery and 313 vB for the two-claim settlement. `--fee-rate` overrides the satoshi option; a
+non-positive rate is rejected before anything is built.
 
 **GC and the graveyard.** `Disprove` is a Bitcoin script spend. It does not call the graveyard, and
 the graveyard does not charge this transaction: the graveyard is a CubeVM manager that buries Cube
@@ -649,6 +684,8 @@ are run directly below:
 cargo test --test state_manager      # register a contract, insert two keys, apply, reload
 cargo test --test graveyard          # bury accounts, read redemption amounts, persistence
 cargo test --test batch_atomicity    # a corrupt aggregate signature leaves no delta; retry works
+cargo test --test commit_recovery    # crash mid-commit, replay the archive, fail-stop on pending
+cargo test -p cube --lib sync_manager::tests   # reorg detector and tip persistence
 cargo test --test exec               # opcode execution
 cargo test --test simul              # liftup simulation
 cargo test --test fixed_split_vault  # 36 reference-model cases
@@ -675,11 +712,37 @@ That is the rollback guarantee: validation failure leaves no delta behind.
 fresh manager reading the values back from sled. `graveyard` does the same for burial and redemption
 accounting. Those are the garbage-collection and death paths at the manager level.
 
-### Known boundaries
+### Crash and reorg boundaries
 
-The `ExecCtx` rollback covers the execution delta, not a crash inside a manager's `apply_changes`
-flush. `batch_atomicity` proves a rejected batch, not a power loss mid-write. Crash/reorg recovery
-is not implemented and is listed as a gap in the specification's test matrix.
+A batch commit touches six independent Sled stores, which cannot share a transaction
+(specification §11.2 says so explicitly). `ExecCtx::apply_changes` therefore writes a durable
+intent to `storage/<chain>/commit_journal` before the first manager changes, archives the batch
+before that, and closes the intent only after the tips and the utxo removal. If the process stops
+in between, the next start finds the intent and `reconcile_pending_commit`:
+
+1. reads the in-flight record from the journal and every earlier record from the archival store;
+2. resets the Cube tips (the Bitcoin scan tip and the chain-derived utxo set survive);
+3. erases the batch-derived managers and re-executes the records in order in replay mode;
+4. checks that each replayed record reproduces the archived txid, payload and entry ids;
+5. restores the lift outpoints the replay consumes, archives the in-flight record if needed, and
+   closes the intent.
+
+`tests/commit_recovery.rs` builds two real liftup batches, executes them cleanly, repeats the run
+with an injected fault after the coin manager applied, drops every store handle (the crash),
+reconciles, and compares the reopened managers with the clean run. A second test proves that a
+pending intent makes `execute_batch` return `UnreconciledCommit(height)` instead of applying on top
+of a torn commit. The failpoint is a `#[doc(hidden)]` atomic and does nothing unless a test sets it.
+
+Recovery is O(history) and requires archival storage; a pruned node refuses to start with
+`MissingArchivedRecord` instead of guessing which stores committed.
+
+The reorg policy is deliberately narrower: the sync manager records the height and hash of the last
+scanned block, and chain sync refuses to extend the scan when the node's active chain no longer
+contains that block. It prints `Reorg below the finalized tip` and exits with status 2. It does not
+un-apply committed Cube batches; doing that safely is a protocol decision, not a storage repair.
+
+Power-loss durability remains sled's fsync policy rather than a per-manager `flush()`. The fault
+injection simulates a process stop, which is the boundary this code claims.
 
 The VM and Bitcoin halves are composed for the value path by stage 11b, and the VM-derived manifest
 is proved in `tests/engine_proof.rs`. What remains is the canonical-state representation adapter
@@ -729,6 +792,8 @@ The last two mine 12,960 blocks each.
 | `the stored gross value and fee reserve do not add up to the deposit` | Tampered or stale transition artifact. |
 | `claim 0 script does not match the successor output` | Tampered claim in the stored tree. |
 | `the network fee reserve exceeds the deposit` | The deposit cannot pay the successor's miner fee. |
+| `the fee rate must be a positive sat/vB value` | `--fee-rate` was zero or negative. |
+| `... below the 330-sat P2TR dust threshold ...` | A rate-based settlement fee is too small to fund as a standalone P2TR input; raise the rate or use `--fee-input-sats`. |
 
 ## Appendix B — Artifact inventory
 

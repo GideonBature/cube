@@ -352,6 +352,13 @@ Implement a single atomic store or a documented write-ahead journal around the e
 
 The accepted-state transaction must atomically include balance/storage changes and package inventory, or journal enough information to reconcile each partial boundary without conflicting authorizations. An async function performing several writes is not itself an atomic transaction.
 
+Implemented for the batch commit: `inscriptive::commit_journal` writes the `BatchRecord` intent to
+its own Sled store and flushes it before the first manager changes; the archival insert also moves
+ahead of the managers. `reconcile_pending_commit` replays the archived records from height one in
+replay mode, compares each replayed record with the archived one, restores the lift outpoints the
+replay consumes, and closes the intent. `tests/commit_recovery.rs` exercises the torn-commit and
+fail-stop paths. The remaining P7 records (operations, authorizations, packages) are still open.
+
 Suggested records:
 
 | Record | Important contents |

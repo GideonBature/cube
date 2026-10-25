@@ -87,6 +87,7 @@ pub async fn liftup_local_command(
         Arc::clone(privileges_manager),
         Arc::clone(params_manager),
         archival_manager,
+        None,
     );
 
     // 10 Execute the liftup in the exec ctx.

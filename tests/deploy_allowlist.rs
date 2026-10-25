@@ -125,6 +125,7 @@ async fn harness() -> (EXEC_CTX, RootAccount) {
         Arc::clone(&privileges_manager),
         Arc::clone(&params_manager),
         None,
+        None,
     );
 
     (exec_ctx, root_account)

@@ -1,5 +1,6 @@
 use crate::inscriptive::archival_manager::errors::insert_error::ArchivalManagerInsertBatchRecordError;
 use crate::inscriptive::coin_manager::errors::apply_changes_errors::CMApplyChangesError;
+use crate::inscriptive::commit_journal::errors::journal_error::CommitJournalError;
 use crate::inscriptive::flame_manager::errors::apply_changes_error::FMApplyChangesError;
 use crate::inscriptive::graveyard::errors::apply_changes_error::GraveyardApplyChangesError;
 use crate::inscriptive::registry::errors::apply_changes_error::RMApplyChangesError;
@@ -15,4 +16,8 @@ pub enum ApplyChangesError {
     PrivilegesManagerApplyChangesError(sled::Error),
     FlameManagerApplyChangesError(FMApplyChangesError),
     ArchivalManagerInsertBatchRecordError(ArchivalManagerInsertBatchRecordError),
+    CommitJournalBeginError(CommitJournalError),
+    CommitJournalFinishError(CommitJournalError),
+    /// A test-only fault injected at a chosen point in the commit sequence.
+    InjectedFault(u8),
 }

@@ -4,6 +4,7 @@ use crate::communicative::tcp::protocol::in_flight_sync::InFlightSyncResponseBod
 use crate::executive::exec_ctx::exec_ctx::ExecCtx;
 use crate::inscriptive::archival_manager::archival_manager::ARCHIVAL_MANAGER;
 use crate::inscriptive::coin_manager::coin_manager::COIN_MANAGER;
+use crate::inscriptive::commit_journal::commit_journal::CommitJournal;
 use crate::inscriptive::flame_manager::flame_manager::FLAME_MANAGER;
 use crate::inscriptive::graveyard::graveyard::GRAVEYARD;
 use crate::inscriptive::params_manager::params_manager::PARAMS_MANAGER;
@@ -29,6 +30,7 @@ pub async fn in_flight_batch_sync_background_task(
     privileges_manager: &PRIVILEGES_MANAGER,
     params_manager: &PARAMS_MANAGER,
     archival_manager: &Option<ARCHIVAL_MANAGER>,
+    commit_journal: Option<CommitJournal>,
 ) {
     loop {
         let current_cube_batch_sync_height_tip = {
@@ -69,6 +71,7 @@ pub async fn in_flight_batch_sync_background_task(
                     Arc::clone(privileges_manager),
                     Arc::clone(params_manager),
                     archival_manager.clone(),
+                    commit_journal.clone(),
                 );
 
                 let execute_batch_result = {

@@ -153,6 +153,7 @@ impl SessionPool {
             Arc::clone(privileges_manager),
             Arc::clone(params_manager),
             archival_manager,
+            None,
         );
 
         // 2 Construct the session pool.

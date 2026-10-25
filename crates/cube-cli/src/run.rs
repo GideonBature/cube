@@ -115,16 +115,24 @@ pub fn dispatch(cli: Cli) -> Result<Value> {
                 } else {
                     Some(args.to.clone())
                 };
-                let outcome =
-                    scenario::settle_claims(&chain, &mut state, destinations, args.fee_input_sats)?;
+                let outcome = scenario::settle_claims(
+                    &chain,
+                    &mut state,
+                    destinations,
+                    settlement_fee(args.fee_input_sats, args.fee_rate),
+                )?;
                 state.save(&cli.state)?;
                 serde_json::to_value(&outcome)?
             }
         },
         Command::Assertion { command } => match command {
             crate::cli::AssertionCommand::Assert(args) => {
-                let outcome =
-                    scenario::assert_claim(&chain, &mut state, args.index, args.fee_sats)?;
+                let outcome = scenario::assert_claim(
+                    &chain,
+                    &mut state,
+                    args.index,
+                    fee_spec(args.fee_sats, args.fee_rate),
+                )?;
                 state.save(&cli.state)?;
                 json!({
                     "txid": outcome.txid,
@@ -177,6 +185,22 @@ fn rpc_config(cli: &Cli) -> RpcConfig {
         password: cli.rpc_password.clone(),
         datadir: cli.datadir.clone(),
         port: cli.rpc_port,
+    }
+}
+
+/// Resolves a command's fee choice: a rate overrides the satoshi amount.
+fn fee_spec(fee_sats: u64, fee_rate: Option<f64>) -> scenario::FeeSpec {
+    match fee_rate {
+        Some(rate) => scenario::FeeSpec::Rate(rate),
+        None => scenario::FeeSpec::Sats(fee_sats),
+    }
+}
+
+/// Resolves a settlement's fee choice: a rate overrides the external input value.
+fn settlement_fee(fee_input_sats: u64, fee_rate: Option<f64>) -> scenario::SettlementFee {
+    match fee_rate {
+        Some(rate) => scenario::SettlementFee::Rate(rate),
+        None => scenario::SettlementFee::Input(fee_input_sats),
     }
 }
 
@@ -297,15 +321,25 @@ fn scenario_options(args: &ScenarioRunArgs) -> scenario::ScenarioOptions {
 
 /// Recovers one claim.
 fn recover(chain: &Chain, state: &mut State, args: &RecoverArgs) -> Result<Value> {
-    let outcome =
-        scenario::recover_claim(chain, state, args.index, args.to.clone(), args.fee_sats)?;
+    let outcome = scenario::recover_claim(
+        chain,
+        state,
+        args.index,
+        args.to.clone(),
+        fee_spec(args.fee_sats, args.fee_rate),
+    )?;
     Ok(serde_json::to_value(&outcome)?)
 }
 
 /// Takes the stored assertion.
 fn take(chain: &Chain, state: &mut State, args: &TakeArgs) -> Result<Value> {
-    let outcome =
-        scenario::take_assertion(chain, state, args.to.clone(), args.fee_sats, args.wait)?;
+    let outcome = scenario::take_assertion(
+        chain,
+        state,
+        args.to.clone(),
+        fee_spec(args.fee_sats, args.fee_rate),
+        args.wait,
+    )?;
     Ok(serde_json::to_value(&outcome)?)
 }
 
@@ -319,8 +353,13 @@ fn disprove(chain: &Chain, state: &mut State, args: &DisproveArgs) -> Result<Val
             .bytes(),
         None => keys::DISCLOSURE_SECRET,
     };
-    let outcome =
-        scenario::disprove_assertion(chain, state, args.to.clone(), secret, args.fee_sats)?;
+    let outcome = scenario::disprove_assertion(
+        chain,
+        state,
+        args.to.clone(),
+        secret,
+        fee_spec(args.fee_sats, args.fee_rate),
+    )?;
     Ok(serde_json::to_value(&outcome)?)
 }
 
@@ -330,7 +369,7 @@ fn refund(chain: &Chain, state: &mut State, args: &RefundArgs) -> Result<Value> 
         chain,
         state,
         args.to.clone(),
-        args.fee_sats,
+        fee_spec(args.fee_sats, args.fee_rate),
         args.mine_past_maturity,
     )?;
     Ok(serde_json::to_value(&outcome)?)

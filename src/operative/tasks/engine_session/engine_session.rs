@@ -4,6 +4,7 @@ use crate::communicative::rpc::bitcoin_rpc::bitcoin_rpc_holder::BitcoinRPCHolder
 use crate::executive::exec_ctx::exec_ctx::ExecCtx;
 use crate::inscriptive::archival_manager::archival_manager::ARCHIVAL_MANAGER;
 use crate::inscriptive::coin_manager::coin_manager::COIN_MANAGER;
+use crate::inscriptive::commit_journal::commit_journal::CommitJournal;
 use crate::inscriptive::flame_manager::flame_manager::FLAME_MANAGER;
 use crate::inscriptive::graveyard::graveyard::GRAVEYARD;
 use crate::inscriptive::params_manager::params_manager::PARAMS_MANAGER;
@@ -37,6 +38,7 @@ pub async fn engine_batch_builder_background_task(
     privileges_manager: &PRIVILEGES_MANAGER,
     params_manager: &PARAMS_MANAGER,
     archival_manager: &Option<ARCHIVAL_MANAGER>,
+    commit_journal: Option<CommitJournal>,
 ) {
     if archival_manager.is_none() {
         panic!("Archival manager is required for engine batch builder background task.");
@@ -185,6 +187,7 @@ pub async fn engine_batch_builder_background_task(
             Arc::clone(privileges_manager),
             Arc::clone(params_manager),
             archival_manager.clone(),
+            commit_journal.clone(),
         );
 
         // 13 Try to execute the batch container.

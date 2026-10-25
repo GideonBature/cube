@@ -13,6 +13,7 @@ use crate::executive::entry_executions::liftup_execution::error::liftup_executio
 use crate::executive::entry_executions::move_execution::error::move_execution_error::MoveExecutionError;
 use crate::executive::entry_executions::swapout_execution::error::swapout_execution_error::SwapoutExecutionError;
 use crate::executive::exec_ctx::errors::apply_changes_error::ApplyChangesError;
+use crate::inscriptive::commit_journal::errors::journal_error::CommitJournalError;
 use bitcoin::OutPoint;
 
 /// A type alias for the current batch sync height tip.
@@ -66,4 +67,8 @@ pub enum BatchExecutionError {
     AggregateBLSSignatureVerificationError,
     ExecutedEntryIdError,
     ApplyChangesError(ApplyChangesError),
+    /// A previous commit did not finish; reconciliation must run before another batch.
+    UnreconciledCommit(u64),
+    /// The pending-commit check itself failed.
+    CommitJournalError(CommitJournalError),
 }

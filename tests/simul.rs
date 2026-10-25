@@ -298,6 +298,7 @@ mod simul_tests {
             Arc::clone(&privileges_manager),
             Arc::clone(&params_manager),
             None,
+            None,
         );
 
         // 24 Execute the batch.

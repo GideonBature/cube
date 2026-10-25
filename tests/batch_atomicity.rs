@@ -179,6 +179,7 @@ mod batch_atomicity_tests {
             Arc::clone(&privileges_manager),
             Arc::clone(&params_manager),
             None,
+            None,
         );
 
         Harness {
