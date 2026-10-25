@@ -1246,9 +1246,12 @@ name = "cube-scenario"
 version = "0.1.0"
 dependencies = [
  "anyhow",
+ "ark-std 0.5.0",
  "bitcoin",
  "bitcoincore-rpc",
  "cube",
+ "cube-argo",
+ "cube-proof",
  "hex",
  "secp",
  "serde",

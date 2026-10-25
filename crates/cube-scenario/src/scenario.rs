@@ -202,6 +202,8 @@ pub struct RecoveryOutcome {
     pub destination: String,
     /// The value the destination received.
     pub amount_sats: u64,
+    /// The cost breakdown: claim value, miner fee, payout.
+    pub cost: Cost,
 }
 
 /// The result of an `Assert`.
@@ -213,6 +215,8 @@ pub struct AssertOutcome {
     pub claim_index: u32,
     /// The value the assertion output holds.
     pub value_sats: u64,
+    /// The cost breakdown: claim value, miner fee, assertion value.
+    pub cost: Cost,
 }
 
 /// The result of a `Take`.
@@ -230,6 +234,8 @@ pub struct TakeOutcome {
     pub destination: String,
     /// The value the destination received.
     pub amount_sats: u64,
+    /// The cost breakdown: assertion value, miner fee, payout.
+    pub cost: Cost,
 }
 
 /// The result of a `Disprove`.
@@ -241,6 +247,8 @@ pub struct DisproveOutcome {
     pub destination: String,
     /// The value the destination received.
     pub amount_sats: u64,
+    /// The cost breakdown: assertion value, miner fee, payout.
+    pub cost: Cost,
 }
 
 /// The result of a refund attempt.
@@ -258,6 +266,40 @@ pub struct RefundOutcome {
     pub destination: String,
     /// The value the destination received.
     pub amount_sats: u64,
+    /// The cost breakdown: deposit value, miner fee, payout.
+    pub cost: Cost,
+}
+
+/// The cost breakdown of one Bitcoin-side step.
+#[derive(Debug, Clone, Serialize)]
+pub struct Cost {
+    /// The value the step spent (claim, assertion or deposit).
+    pub gross_value_sats: u64,
+    /// The miner fee the step left.
+    pub miner_fee_sats: u64,
+    /// The value the destination received.
+    pub net_payout_sats: u64,
+    /// The transaction virtual size.
+    pub vsize_vbytes: u64,
+    /// The realised fee rate, sat/vB.
+    pub fee_rate_sat_per_vb: f64,
+}
+
+/// Builds the cost breakdown for a signed step.
+fn cost_of(gross_value_sats: u64, miner_fee_sats: u64, transaction: &Transaction) -> Cost {
+    let vsize_vbytes = transaction.vsize() as u64;
+    let fee_rate_sat_per_vb = if vsize_vbytes == 0 {
+        0.0
+    } else {
+        miner_fee_sats as f64 / vsize_vbytes as f64
+    };
+    Cost {
+        gross_value_sats,
+        miner_fee_sats,
+        net_payout_sats: gross_value_sats.saturating_sub(miner_fee_sats),
+        vsize_vbytes,
+        fee_rate_sat_per_vb,
+    }
 }
 
 // ---------------------------------------------------------------------------------------------
@@ -863,6 +905,7 @@ pub fn assert_claim(
         txid: Hex::new(txid.to_byte_array()),
         claim_index: claim_index as u32,
         value_sats: assertion.value_sats(),
+        cost: cost_of(claim.amount_sats, fee_sats, &transaction),
     })
 }
 
@@ -959,6 +1002,7 @@ pub fn take_assertion(
         waited_blocks,
         destination,
         amount_sats: spend.output_value_sats(),
+        cost: cost_of(stored.value_sats, fee_sats, &transaction),
     })
 }
 
@@ -1003,6 +1047,7 @@ pub fn disprove_assertion(
         txid: Hex::new(txid.to_byte_array()),
         destination,
         amount_sats: spend.output_value_sats(),
+        cost: cost_of(stored.value_sats, fee_sats, &transaction),
     })
 }
 
@@ -1049,6 +1094,7 @@ pub fn recover_claim(
         claim_index: claim_index as u32,
         destination,
         amount_sats: recovery.output_value_sats(),
+        cost: cost_of(claim.amount_sats, fee_sats, &transaction),
     })
 }
 
@@ -1111,6 +1157,7 @@ pub fn refund_deposit(
         mined_blocks,
         destination,
         amount_sats: deposit.value_sats.saturating_sub(fee_sats),
+        cost: cost_of(deposit.value_sats, fee_sats, &transaction),
     })
 }
 
@@ -1351,6 +1398,7 @@ fn liftv2_dispute(
         json!({
             "destination": disprove.destination,
             "amount_sats": disprove.amount_sats,
+            "cost": disprove.cost,
             "engine_signature": false,
         }),
     );
@@ -1369,6 +1417,7 @@ fn liftv2_dispute(
             "claim_index": recovery.claim_index,
             "destination": recovery.destination,
             "amount_sats": recovery.amount_sats,
+            "cost": recovery.cost,
             "engine_signature": false,
         }),
     );
@@ -1439,6 +1488,7 @@ fn proof_take(
             "amount_sats": take.amount_sats,
             "premature_rejection": take.premature_rejection,
             "waited_blocks": take.waited_blocks,
+            "cost": take.cost,
             "engine_signature": false,
         }),
     );
@@ -1489,6 +1539,7 @@ fn liftv2_refund(
             "mined_blocks": mature.mined_blocks,
             "destination": mature.destination,
             "amount_sats": mature.amount_sats,
+            "cost": mature.cost,
         }),
     );
 
@@ -1717,6 +1768,7 @@ fn engine_cheat(
         json!({
             "destination": take.destination,
             "amount_sats": take.amount_sats,
+            "cost": take.cost,
             "engine_signature": false,
         }),
     );
@@ -1820,6 +1872,7 @@ fn engine_offline(
             "destination": mature.destination,
             "amount_sats": mature.amount_sats,
             "mined_blocks": mature.mined_blocks,
+            "cost": mature.cost,
             "engine_signature": false,
         }),
     );

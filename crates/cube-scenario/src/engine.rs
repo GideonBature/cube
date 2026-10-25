@@ -74,6 +74,10 @@ const BASE_OPS_PRICE: u32 = 100;
 const OPS_BUDGET: u32 = 100_000;
 
 /// The value-bearing state the VM reached, read back from the managers.
+///
+/// `entry_fee_sats` is the Engine's call fee, not a split obligation. It is recorded here for the
+/// report but excluded from the canonical `SplitState`; the split ledger starts after that fee has
+/// been charged.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct VmExecution {
     /// The template contract id the VM registered, hex.
@@ -156,18 +160,8 @@ async fn execute_fund_split(
     let privileges_manager: PRIVILEGES_MANAGER =
         PrivilegesManager::new(chain).context_debug("privileges manager")?;
 
-    // 3 Zero entry fees, so the VM ledger is directly comparable with the canonical state.
-    {
-        let mut params = params_manager
-            .lock()
-            .expect("the params lock is not poisoned");
-        params.pre_execution();
-        params.set_call_entry_base_fee(0);
-        params.set_call_entry_ppm_calldata_bytesize_fee(0);
-        params
-            .apply_changes()
-            .context("cannot persist the zero-fee params")?;
-    }
+    // 3 Entry fees stay at the protocol defaults. They are charged to the caller and settled by
+    //   the Engine; the canonical split ledger excludes them (see `transition::plan_from_vm`).
 
     // 4 Participants and the fee account.
     let alice = KeyHolder::new(crate::keys::ALICE_SECRET).context("Alice's key holder")?;

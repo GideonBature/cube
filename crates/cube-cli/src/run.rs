@@ -130,6 +130,7 @@ pub fn dispatch(cli: Cli) -> Result<Value> {
                     "txid": outcome.txid,
                     "claim_index": outcome.claim_index,
                     "value_sats": outcome.value_sats,
+                    "cost": outcome.cost,
                     "assertion": state.assertion,
                 })
             }

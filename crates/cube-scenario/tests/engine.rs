@@ -45,8 +45,15 @@ fn the_cubevm_funds_the_split_and_its_state_becomes_the_manifest() {
     assert_eq!(vm.bob_shadow_sats, 345_100);
     assert_eq!(vm.carol_shadow_sats, 147_900);
     assert_eq!(vm.fee_balance_sats, execution_fee_sats);
-    assert_eq!(vm.owner_balance_sats, owner_start_sats - gross_sats);
-    assert_eq!(vm.entry_fee_sats, 0, "the flow runs with zero entry fees");
+    assert_eq!(
+        vm.owner_balance_sats + gross_sats + vm.entry_fee_sats,
+        owner_start_sats,
+        "the VM's balances must account for the entry fee"
+    );
+    assert!(
+        vm.entry_fee_sats > 0,
+        "the flow uses the protocol's entry-fee defaults"
+    );
 
     // 2 The manifest is derived from the VM's state.
     let transition = from_vm(&deposit(500_000), &vm, &TransitionOptions::default())

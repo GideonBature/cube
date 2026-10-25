@@ -4,11 +4,20 @@ version = "0.1.0"
 edition = "2021"
 publish = false
 
+[features]
+# Enables the release-only test that proves a VM-derived manifest with Groth16 and evaluates it
+# through Argo. The default CLI build stays free of the proving stack.
+proof = ["dep:ark-std", "dep:cube-argo", "dep:cube-proof"]
+
 [dependencies]
 anyhow = "1"
+ark-std = { version = "0.5.0", optional = true, features = ["getrandom"] }
 bitcoin = "0.32.5"
 bitcoincore-rpc = "0.19.0"
 cube = { path = "../.." }
+# The proving stack is optional so the default CLI does not link it.
+cube-argo = { path = "../cube-argo", optional = true }
+cube-proof = { path = "../cube-proof", optional = true }
 hex = "0.4.3"
 # The same MuSig2 primitives the repository's LiftV2 graph uses, so the CLI signs the deposit key
 # path with the implementation under test rather than a second one.

@@ -45,8 +45,12 @@ use colored::Colorize;
 use std::sync::Arc;
 use std::time::Duration;
 
-/// Whether MuSig2-based interactive lifts are enabled. Set to false for now since it's not supported yet.
-const V2_LIFT_ENABLED: bool = false;
+/// Whether MuSig2-based interactive lifts are enabled.
+///
+/// Enabled: the graph's deposit is a LiftV2 output (MuSig2 key path plus the participant's CSV
+/// refund), the Liftup decoder and executor validate V2, and `tests/liftv2_scan.rs` pins that the
+/// node's UTXO scan finds V2 outputs when this is on.
+const V2_LIFT_ENABLED: bool = true;
 
 #[tokio::main]
 pub async fn run(

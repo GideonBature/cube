@@ -90,6 +90,13 @@ cargo run -p cube-cli -- scenario run liftv2-refund   # mines ~13,000 blocks
 fixtures and the CLI is regtest-only. The full sequential acceptance run, including the negative
 cases and the state/garbage-collection suites, is [docs/e2e_regtest.md](docs/e2e_regtest.md).
 
+The VM-derived proof test is release-only and feature-gated so the default CLI does not link the
+proving stack:
+
+```sh
+cargo test --release -p cube-scenario --features proof --test engine_proof -- --ignored
+```
+
 ## License
 
 This project is licensed under the CC0 1.0 Universal License. See the `LICENSE` file for details.

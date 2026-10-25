@@ -43,6 +43,9 @@ use cube::transmutative::hash::{Hash, HashTag};
 /// The digest tag of the CLI's fixture claim ids.
 const CLAIM_ID_TAG: &str = "CubeFixture/ClaimId/v0";
 
+/// The canonical `SplitState` encoding length with an instance present.
+const CANONICAL_STATE_LEN: usize = 343;
+
 /// Parameters a caller may override when deriving a transition.
 #[derive(Debug, Clone)]
 pub struct TransitionOptions {
@@ -269,17 +272,32 @@ pub fn derive(deposit: &Deposit, options: &TransitionOptions) -> Result<Transiti
     artifact(&manifest, setup_instance_id, gross_sats, options)
 }
 
-/// Derives the transition from the state the CubeVM actually reached.
+/// The manifest and canonical state bytes a VM execution reached.
 ///
-/// The VM execution must have run with zero entry fees, because the canonical `SplitState` models
-/// the split's obligations and not the Engine's entry-fee market. The value-bearing fields —
-/// owner and fee balances, contract balance, both shadows and the phase — are copied from the VM
-/// into the state, and every one of them is first checked against the reference model.
-pub fn from_vm(
+/// These are the exact inputs the `FundSplit` circuit takes: the canonical manifest encoding and the
+/// 343-byte previous and resulting states. They come from `plan_from_vm`, not from a model run.
+#[derive(Debug, Clone)]
+pub struct VmPlan {
+    /// The derived manifest.
+    pub manifest: TransitionManifest,
+    /// The canonical previous state (the instantiated, empty vault).
+    pub previous_state: Vec<u8>,
+    /// The canonical resulting state, carrying the VM's values.
+    pub resulting_state: Vec<u8>,
+}
+
+/// Builds the manifest and canonical state bytes from a CubeVM execution.
+///
+/// The canonical split ledger starts **after** the Engine's entry fee: that fee is a call fee, not a
+/// split obligation, so it is excluded from the `SplitState` while the VM's actual account balance
+/// still reflects it. The VM's value-bearing fields — contract balance, both shadows and the fee
+/// account — are copied into the state, and every one of them is checked against the reference
+/// model before the manifest is derived.
+pub fn plan_from_vm(
     deposit: &Deposit,
     vm: &VmExecution,
     options: &TransitionOptions,
-) -> Result<Transition> {
+) -> Result<VmPlan> {
     if options.network_fee_reserve_sats == 0 {
         bail!("the successor must leave a positive miner fee");
     }
@@ -303,15 +321,27 @@ pub fn from_vm(
     if vm.phase_tag != Phase::Allocated.tag() {
         bail!("the VM vault is not in the ALLOCATED phase");
     }
-    if vm.entry_fee_sats != 0 {
+
+    // 0 The VM's accounting must be internally consistent: start = entry fee + gross + remainder.
+    let effective_owner_start = vm
+        .owner_balance_sats
+        .checked_add(gross_sats)
+        .context("the VM's owner balance overflows")?;
+    let expected_start = effective_owner_start
+        .checked_add(vm.entry_fee_sats)
+        .context("the VM's owner start overflows")?;
+    if vm.owner_start_sats != expected_start {
         bail!(
-            "the VM charged {} sats of entry fees; the canonical state does not model them",
-            vm.entry_fee_sats
+            "the VM's balances do not add up: start {} != entry fee {} + gross {} + remainder {}",
+            vm.owner_start_sats,
+            vm.entry_fee_sats,
+            gross_sats,
+            vm.owner_balance_sats
         );
     }
 
-    // 1 Run the model with the VM's starting balance. It is the differential oracle.
-    let mut vault = instantiated_model(vm.owner_start_sats)?;
+    // 1 Run the model with the canonical starting balance. It is the differential oracle.
+    let mut vault = instantiated_model(effective_owner_start)?;
     let parent = vault.state();
     let (operation, auth) = fund_operation();
     let accepted: ModelTransition = vault
@@ -363,10 +393,41 @@ pub fn from_vm(
     }
 
     // 4 Derive the manifest from the VM's resulting state.
-    let (context, setup_instance_id) = manifest_context(deposit, options);
+    let (context, _) = manifest_context(deposit, options);
     let manifest = derive_manifest(&context, &parent, &accepted, auth, operation, &vm_state)
         .context_debug("the manifest could not be derived from the VM's state")?;
-    let mut transition = artifact(&manifest, setup_instance_id, gross_sats, options)?;
+    if manifest.previous_state_digest != parent.digest()
+        || manifest.resulting_state_digest != vm_state.digest()
+    {
+        bail!("the derived manifest does not commit the states it was derived from");
+    }
+
+    let previous_state = parent.encode();
+    let resulting_state = vm_state.encode();
+    if previous_state.len() != CANONICAL_STATE_LEN || resulting_state.len() != CANONICAL_STATE_LEN {
+        bail!(
+            "the canonical state encoding is not {CANONICAL_STATE_LEN} bytes: {} and {}",
+            previous_state.len(),
+            resulting_state.len()
+        );
+    }
+
+    Ok(VmPlan {
+        manifest,
+        previous_state,
+        resulting_state,
+    })
+}
+
+/// Derives the transition artifact from the state the CubeVM actually reached.
+pub fn from_vm(
+    deposit: &Deposit,
+    vm: &VmExecution,
+    options: &TransitionOptions,
+) -> Result<Transition> {
+    let plan = plan_from_vm(deposit, vm, options)?;
+    let (_, setup_instance_id) = manifest_context(deposit, options);
+    let mut transition = artifact(&plan.manifest, setup_instance_id, vm.gross_sats, options)?;
     transition.vm = Some(vm.clone());
     Ok(transition)
 }

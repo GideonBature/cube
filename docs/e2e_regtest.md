@@ -52,9 +52,11 @@ The table is deliberately blunt.
 | CubeVM contract execution (template, entry, call) | `fixed_split_vault`, `split_vault_template`, `call_entry` | implemented, in-process suite |
 | State manager persistence and garbage collection | `state_manager`, `graveyard` | implemented, in-process suite |
 | Batch atomicity and rollback | `batch_atomicity` | implemented, in-process suite |
-| **VM state -> manifest -> Bitcoin settlement in one run** | `scenario run engine-e2e` | implemented, regtested (zero entry fees) |
-| **VM-derived manifest -> real Groth16 proof in one run** | none | **composition gap** |
-| **Engine-scanned LiftV2 liftup in a node run** | none | **config gap** |
+| **VM state -> manifest -> Bitcoin settlement in one run** | `scenario run engine-e2e` | implemented, regtested (Engine fees excluded from the canonical ledger) |
+| **Per-step Bitcoin cost visibility** | `cost` in `assert`/`take`/`disprove`/`recover`/`refund` | implemented |
+| **VM-derived manifest -> real Groth16 proof -> Argo -> Bitcoin** | `tests/engine_proof.rs` (`--features proof`, release) | implemented, regtested |
+| **Engine-scanned LiftV2 outputs** | `V2_LIFT_ENABLED = true`, `tests/liftv2_scan.rs` | implemented, scan tested |
+| V2 liftup through the interactive node CLI | none | **not rehearsed** |
 | BIP-340 inside the proof relation | none | **not implemented** (`BIND-01`) |
 | Unilateral operator assertion without the beneficiary | none | **not implemented** (`BIND-01`) |
 | Data availability of the table and authenticated input | none | **commitments only** (`DA-01`) |
@@ -66,7 +68,7 @@ The table is deliberately blunt.
 `scenario run engine-e2e` closes the value path:
 
 1. it boots the same managers and session pool the node uses;
-2. it executes `fund_split` through `exec_call_in_pool` with zero entry fees;
+2. it executes `fund_split` through `exec_call_in_pool` with the protocol's default entry fees;
 3. it reads the owner and fee balances, the contract balance, both shadows and the phase back from
    the managers;
 4. it checks every value against the reference model and aborts on a one-satoshi disagreement;
@@ -74,20 +76,26 @@ The table is deliberately blunt.
    the artifact;
 6. it publishes the successor and settles both claims on Bitcoin.
 
-What this does **not** settle:
+A second, release-only test closes the cryptographic composition:
+`tests/engine_proof.rs` proves the VM-derived manifest with Groth16, evaluates the real proof
+through Argo's garbled table, binds the authenticated input and table digests into the assertion
+terms, and takes the claim on Bitcoin. It lives behind the `proof` feature so the default CLI build
+does not link the proving stack.
+
+What is still open:
 
 - **The canonical-state adapter.** `SplitState`'s contract identity and caller sequences are graph
   metadata; the template does not write them. The state digests therefore combine VM values with
   model identity and sequence fields.
-- **Entry fees.** The composed run uses zero entry fees: the canonical state models the split's
-  obligations, not the Engine's entry-fee market. A production flow must either exclude Engine
-  fees from the canonical ledger by design or extend the relation to model them.
-- **The proof.** `proof_take_regtest` proves a model-derived manifest. Proving the VM-derived
-  manifest in the same run is the remaining composition step.
-- **LiftV2 scanning.** `V2_LIFT_ENABLED` is off in the runner, so the Engine does not yet scan and
-  lift the V2 outputs that the graph uses; every scenario funds the deposit externally.
+- **Entry fees are excluded by definition.** The canonical ledger starts after the Engine's call
+  fee: the VM's raw owner balance includes it, the state handed to the circuit does not. That is
+  the documented boundary, not a zero-fee fixture. If the specification wants Engine fees inside
+  the committed state, it is a schema and circuit change.
+- **V2 liftup through the node CLI.** The scan switch is on and the scan is tested, but the
+  interactive `liftup` path has not been rehearsed end to end against the node CLI. Every scenario
+  still funds the deposit externally.
 
-These are integration and representation tasks on top of implemented components.
+These are representation and harness tasks on top of implemented components.
 
 ### The genuine research and operational gaps
 
@@ -443,13 +451,14 @@ cube --state target/e2e/take.json transition build --challenge-blocks 10 >/dev/n
 cube --state target/e2e/take.json successor publish >/dev/null
 
 cube --state target/e2e/take.json assertion assert 0 --fee-sats 1000 \
-  | jq -e '.value_sats == 344100'
+  | jq -e '.value_sats == 344100 and .cost.gross_value_sats == 345100 and .cost.miner_fee_sats == 1000'
 
 cube --state target/e2e/take.json assertion take --fee-sats 500 \
   | jq -e '.accepted == false and .premature_rejection == "non-BIP68-final"'
 
 cube --state target/e2e/take.json assertion take --fee-sats 500 --wait \
-  | jq -e '.accepted == true and .waited_blocks == 10 and .amount_sats == 343600'
+  | jq -e '.accepted == true and .waited_blocks == 10 and .amount_sats == 343600
+           and .cost.miner_fee_sats == 500 and .cost.net_payout_sats == 343600'
 ```
 
 `assertion take` without `--wait` reports the node's rejection instead of broadcasting: a premature
@@ -463,10 +472,11 @@ cube --state target/e2e/disprove.json transition build --challenge-blocks 10 >/d
 cube --state target/e2e/disprove.json successor publish >/dev/null
 
 cube --state target/e2e/disprove.json assertion assert 1 --fee-sats 1000 \
-  | jq -e '.value_sats == 146900'
+  | jq -e '.value_sats == 146900 and .cost.miner_fee_sats == 1000'
 
 cube --state target/e2e/disprove.json assertion disprove --fee-sats 500 \
-  | jq -e '.amount_sats == 146400'
+  | jq -e '.amount_sats == 146400 and .cost.gross_value_sats == 146900
+           and .cost.miner_fee_sats == 500'
 ```
 
 The default secret is the fixture `0x11…11`, which is exactly what the terms commit (a plain
@@ -482,6 +492,42 @@ cube --state target/e2e/disprove.json assertion disprove \
 This is the participant-scoped model: Bob signs the `Assert` because Bob's value is at stake. The
 `Disprove` leaf is the backstop for a wrong assertion or a setup later shown unsound. A fully
 unilateral operator assertion is the open `BIND-01` gap.
+
+### What a dispute costs
+
+Every assertion-path response carries a `cost` block: the gross value the step spent, the miner
+fee, the net payout, the transaction virtual size and the realised fee rate. For the fixture:
+
+| Step | Gross | Miner fee | Net | vsize | sat/vB |
+|---|---|---|---|---|---|
+| `Assert` claim 1 | 147,900 | 1,000 | 146,900 | 154 | 6.49 |
+| `Disprove` | 146,900 | 500 | 146,400 | 150 | 3.33 |
+| `Take` claim 0 | 344,100 | 500 | 343,600 | 134 | 3.73 |
+
+```json
+{
+  "amount_sats": 146400,
+  "cost": {
+    "gross_value_sats": 146900,
+    "miner_fee_sats": 500,
+    "net_payout_sats": 146400,
+    "vsize_vbytes": 150,
+    "fee_rate_sat_per_vb": 3.3333333333333335
+  }
+}
+```
+
+The fee is a caller-supplied satoshi amount, not a fee-rate calculation; `fee_rate_sat_per_vb` is
+the *realised* rate, so a reviewer can see whether the chosen fee is sane. Deriving the fee from a
+target rate is the open fee-policy gap.
+
+**GC and the graveyard.** `Disprove` is a Bitcoin script spend. It does not call the graveyard, and
+the graveyard does not charge this transaction: the graveyard is a CubeVM manager that buries Cube
+accounts and records redemption amounts at the Engine layer. The only on-chain cost of this dispute
+is the miner fee plus the assertion fee paid earlier. If the design should make cleanup costly — a
+dispute bond, a penalty, or a graveyard redemption fee — that must be added to `AssertionTerms` and
+the graph, or to the graveyard accounting. It is not implicit in the current path; `ECON-01` covers
+it and is open.
 
 ---
 
@@ -550,7 +596,7 @@ back from the managers, derives the manifest from that state, and settles the tw
 
 ```sh
 cube --state target/e2e/engine.json scenario run engine-e2e \
-  | jq -e '(.steps | length) == 6 and .steps[1].outcome.entry_fee_sats == 0'
+  | jq -e '(.steps | length) == 6 and .steps[1].outcome.entry_fee_sats > 0'
 ```
 
 Expected:
@@ -558,7 +604,7 @@ Expected:
 | Step | What it proves | Values |
 |---|---|---|
 | `deposit` | the Bitcoin deposit exists | 500,000 sats |
-| `vm_fund_split` | the CubeVM executed the call | contract 493,000; Bob 345,100; Carol 147,900; fee 5,000; owner 502,000; entry fee 0 |
+| `vm_fund_split` | the CubeVM executed the call | contract 493,000; Bob 345,100; Carol 147,900; fee 5,000; owner 501,878; entry fee 122 |
 | `manifest_from_vm` | the manifest comes from the VM state | statement digest and both bindings |
 | `verify` | `transition verify` re-runs the VM-derived path | `verified: true` |
 | `successor` | the manifest is funded into two v2 claims | 2 claims |
@@ -567,16 +613,29 @@ Expected:
 The `vm` section of the state file records the execution, so `transition verify` re-runs
 `transition::from_vm` instead of the model-only derivation.
 
-Why zero entry fees: the canonical `SplitState` models the split's obligations, not the Engine's
-entry-fee market. Running the VM with `call_entry_base_fee = 0` and
-`call_entry_ppm_calldata_bytesize_fee = 0` makes the VM ledger and the canonical state directly
-comparable. The execution fee is still charged by the template as its own transfer. A production
-flow must either exclude Engine entry fees from the canonical ledger by design or extend the
-relation to model them; see section 0.
+Why the entry fee is not in the canonical state: the VM charges the protocol's default call fee
+(122 sats for this call) to Alice. The canonical `SplitState` starts **after** that fee — its owner
+balance is 999,878 at the start of the split, not 1,000,000. `transition::from_vm` checks the
+accounting (`start = entry fee + gross + remainder`) before deriving the manifest. Engine fees are
+settled outside the split; if the specification wants them inside the committed state, it is a
+schema and circuit change.
 
 The composed run aborts before any Bitcoin transaction if a single VM value disagrees with the
 reference model. That check is what makes the manifest a statement about the VM's execution rather
 than a second model run.
+
+### The VM-derived proof
+
+```sh
+cargo test --release -p cube-scenario --features proof \
+  --test engine_proof -- --ignored --nocapture
+```
+
+This test takes the same VM-derived plan, proves it with Groth16, converts the verifying key into
+Argo's equation, garbles a table, evaluates the real proof (`Accepted`), binds the authenticated
+input digest, table digest and verifier identity into the assertion terms, publishes the successor,
+asserts, and takes the claim. It is release-only and feature-gated so the default CLI does not link
+the proving stack. Measured: about 13 s of test time in release.
 
 ---
 
@@ -622,9 +681,9 @@ The `ExecCtx` rollback covers the execution delta, not a crash inside a manager'
 flush. `batch_atomicity` proves a rejected batch, not a power loss mid-write. Crash/reorg recovery
 is not implemented and is listed as a gap in the specification's test matrix.
 
-The VM and Bitcoin halves are composed for the value path by stage 11b. What remains is the
-representation adapter (canonical identity and sequences), entry fees, and a real proof over a
-VM-derived manifest (section 0).
+The VM and Bitcoin halves are composed for the value path by stage 11b, and the VM-derived manifest
+is proved in `tests/engine_proof.rs`. What remains is the canonical-state representation adapter
+(identity and sequences) and the interactive V2 liftup rehearsal (section 0).
 
 ---
 
@@ -634,15 +693,23 @@ VM-derived manifest (section 0).
 # offline artifact, derivation and composed-Engine tests
 cargo test -p cube-scenario
 
+# the node's LiftV2 scan switch
+cargo test --test liftv2_scan
+
 # seven scenarios, fresh chain per run
 ./scripts/regtest.sh cli
 
-# node-backed test files plus the release proof test
+# node-backed test files plus the model-derived release proof test
 ./scripts/regtest.sh all
+
+# the VM-derived manifest through Groth16, Argo and Bitcoin (release, ignored)
+cargo test --release -p cube-scenario --features proof \
+  --test engine_proof -- --ignored --nocapture
 ```
 
-Expected: `cube-scenario` 5 passed; `cli` exit 0 with seven scenario reports; `all` exit 0 with
-every node-backed file green and `proof_take_regtest` reporting `valid proof taken`.
+Expected: `cube-scenario` 5 passed; `liftv2_scan` 1 passed; `cli` exit 0 with seven scenario
+reports; `all` exit 0 with every node-backed file green and `proof_take_regtest` reporting
+`valid proof taken`; `engine_proof` 1 passed with a taken claim.
 
 `./scripts/regtest.sh cli` takes about 3 minutes. It runs, in order: `liftv2-cooperative`,
 `liftv2-dispute`, `proof-take`, `engine-e2e`, `engine-cheat`, `engine-offline`, `liftv2-refund`.
@@ -688,5 +755,7 @@ the artifact so the history remains inspectable.
 | §9.2 roles: SuccessorFunding, Recovery, Assert/Take/Disprove, CooperativeSettle | stages 4–11 |
 | Binding construction | stage 5 and `docs/bind_01.md` |
 | VM state -> manifest -> Bitcoin settlement | stage 11b |
+| VM-derived manifest proved with Groth16 and Argo | stage 11b, `tests/engine_proof.rs` |
+| LiftV2 output discovery by the node | `tests/liftv2_scan.rs` |
 | State/GC and rollback | stage 13 |
 | Remaining gaps | section 0 and `docs/implementation.md` |
