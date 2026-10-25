@@ -35,10 +35,21 @@ start() {
   compose down -v >/dev/null 2>&1 || true
   compose up -d --wait
   export_env
+}
+
+show_env() {
   echo "regtest node ready at ${CUBE_REGTEST_RPC_URL}"
   echo "export CUBE_REGTEST_RPC_URL=${CUBE_REGTEST_RPC_URL}"
   echo "export CUBE_REGTEST_RPC_USER=${CUBE_REGTEST_RPC_USER}"
   echo "export CUBE_REGTEST_RPC_PASSWORD=${CUBE_REGTEST_RPC_PASSWORD}"
+}
+
+# Regtest halves the block subsidy every 150 blocks. The LiftV2 refund fixture mines ~13,000
+# blocks, which exhausts it, so every test file gets a fresh chain. This also isolates wallets
+# and keeps a failing file from poisoning the next one.
+run_test_file() {
+  start
+  "$@"
 }
 
 stop() {
@@ -50,38 +61,33 @@ run_tests() {
     echo "Docker daemon is not running; start Docker Desktop or another daemon first." >&2
     exit 1
   fi
-  export_env
   cd "$root"
 
-  # The LiftV2 test uses the unscoped node client, so it runs first on a fresh node. The other
-  # tests use wallet-scoped clients and can create their own wallets afterwards.
-  cargo test --test liftv2_regtest -- --test-threads=1
-  cargo test --test assertion_regtest -- --test-threads=1
-  cargo test --test successor_v2_regtest -- --test-threads=1
-  cargo test --test cooperative_settle_regtest -- --test-threads=1
+  run_test_file cargo test --test liftv2_regtest -- --test-threads=1
+  run_test_file cargo test --test assertion_regtest -- --test-threads=1
+  run_test_file cargo test --test successor_v2_regtest -- --test-threads=1
+  run_test_file cargo test --test cooperative_settle_regtest -- --test-threads=1
 
   # Groth16 setup/proving and Argo garbling are only practical in release.
-  cargo test --release --test proof_take_regtest -- --ignored --nocapture
+  run_test_file cargo test --release --test proof_take_regtest -- --ignored --nocapture
 }
 
 case "${1:-all}" in
   up)
     start
+    show_env
     ;;
   down)
     stop
     ;;
-  test)
-    run_tests
-    ;;
-  all)
-    start
-    if [[ "${KEEP:-0}" == "1" ]]; then
-      run_tests
-      echo "KEEP=1: leaving the node running"
-    else
+  test|all)
+    if [[ "${KEEP:-0}" != "1" ]]; then
       trap 'stop' EXIT
-      run_tests
+    fi
+    run_tests
+    if [[ "${KEEP:-0}" == "1" ]]; then
+      echo "KEEP=1: leaving the last node running"
+      show_env
     fi
     ;;
   *)

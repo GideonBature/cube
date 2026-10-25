@@ -10,8 +10,11 @@ container only adds time.
 ./scripts/regtest.sh all
 ```
 
-This starts a fresh node (named volume, RPC user/password), runs every node-backed test, and stops
-the node. `KEEP=1 ./scripts/regtest.sh all` leaves it running for inspection. Individual steps:
+This runs every node-backed test, each file on a **fresh chain**: the named volume is recreated
+before each file. That is required because regtest halves the block subsidy every 150 blocks and the
+LiftV2 refund fixture mines about 13,000 blocks, which would leave later wallets with zero-value
+coinbases. It also isolates wallets and failures. `KEEP=1` leaves the last node running for
+inspection. Individual steps:
 
 ```sh
 ./scripts/regtest.sh up
@@ -33,7 +36,8 @@ Cookie authentication remains supported for a local node with
 ## What runs
 
 - `liftv2_regtest`: the LiftV2 deposit, refund, MuSig2 successor, and the two composed
-  deposit -> successor -> settle/dispute/recover scenarios.
+  deposit -> successor -> settle/dispute/recover scenarios. Its refund fixture mines 12,960 blocks,
+  which is why the runner gives each file a fresh chain.
 - `assertion_regtest`: the Assert/Take/Disprove mechanics and the v2 recovery path.
 - `successor_v2_regtest`: a successor with two v2 claims, an assertion, a disprove and a recovery.
 - `cooperative_settle_regtest`: both claims settled in one transaction.
