@@ -52,9 +52,13 @@ pub async fn open_port(chain: Chain) -> bool {
 
 pub async fn connect(ip_address: &str, chain: Chain) -> Result<TcpStream, TCPError> {
     let port_number = port_number(chain);
-    let addr = format!("{}:{}", ip_address, port_number);
+    connect_addr(&format!("{}:{}", ip_address, port_number)).await
+}
+
+/// Connects to a full socket address, for local runs that skip NNS discovery.
+pub async fn connect_addr(addr: &str) -> Result<TcpStream, TCPError> {
     let timeout = tokio::time::sleep(Duration::from_millis(3_000));
-    let connect = TcpStream::connect(&addr);
+    let connect = TcpStream::connect(addr);
 
     tokio::select! {
         result = connect => {

@@ -25,6 +25,51 @@ pub const SIGNET_GENESIS_PAYLOAD_VOUT: u32 = 0;
 // satoshi amount of the genesis payload.
 pub const SIGNET_GENESIS_PAYLOAD_AMOUNT: u64 = 20_000;
 
+/// Returns the local testbed Engine public key from `CUBE_ENGINE_PUBLIC_KEY`, when set.
+///
+/// A regtest chain has no baked Engine identity, so the operator supplies one. The Engine's nsec
+/// must be the secret of this key, and the node uses the same value to find the Engine.
+pub fn testbed_engine_public_key() -> Option<[u8; 32]> {
+    let value = std::env::var("CUBE_ENGINE_PUBLIC_KEY").ok()?;
+    hex::decode(value.trim()).ok()?.try_into().ok()
+}
+
+/// Returns the local testbed genesis payload location from the environment, when fully set.
+///
+/// Format: `(txid, vout, amount_sats)`. The location must be a confirmed output paying the
+/// genesis payload script for `testbed_engine_public_key()` (or the signet key when that override
+/// is absent). `cargo run genesis testbed` prints the address to fund.
+pub fn testbed_genesis_payload() -> Option<([u8; 32], u32, u64)> {
+    let txid = display_txid_to_internal(&std::env::var("CUBE_TESTBED_GENESIS_TXID").ok()?)?;
+    let vout: u32 = std::env::var("CUBE_TESTBED_GENESIS_VOUT")
+        .ok()?
+        .parse()
+        .ok()?;
+    let amount: u64 = std::env::var("CUBE_TESTBED_GENESIS_AMOUNT")
+        .ok()?
+        .parse()
+        .ok()?;
+    Some((txid, vout, amount))
+}
+
+/// Decodes an RPC/display-order txid into the internal byte order used by outpoints.
+fn display_txid_to_internal(txid: &str) -> Option<[u8; 32]> {
+    let mut bytes: [u8; 32] = hex::decode(txid.trim()).ok()?.try_into().ok()?;
+    bytes.reverse();
+    Some(bytes)
+}
+
+/// Returns the local Engine TCP address override from `CUBE_ENGINE_ADDR`, when set.
+///
+/// Local runs skip Nostr discovery and connect straight to this socket address
+/// (for example `127.0.0.1:6272`).
+pub fn testbed_engine_addr() -> Option<String> {
+    std::env::var("CUBE_ENGINE_ADDR")
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+}
+
 /// Mainnet parameters.
 ///
 // Port number
@@ -45,3 +90,28 @@ pub const MAINNET_GENESIS_PAYLOAD_TX_ID: [u8; 32] = [
 pub const MAINNET_GENESIS_PAYLOAD_VOUT: u32 = 0;
 // satoshi amount of the genesis payload.
 pub const MAINNET_GENESIS_PAYLOAD_AMOUNT: u64 = 0;
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn a_display_txid_decodes_to_internal_order() {
+        // The RPC txid and the internal outpoint txid are byte-reversed relative to each other.
+        // Mixing them makes the batch spend a non-existent output (`bad-txns-inputs-missingorspent`).
+        let internal = display_txid_to_internal(
+            "4fab931529933a61e8b7eafaf97d8b9291c28162bfca28473f7e12d0b5962402",
+        )
+        .expect("valid txid");
+        assert_eq!(
+            hex::encode(internal),
+            "022496b5d0127e3f4728cabf6281c291928b7df9faeab7e8613a93291593ab4f"
+        );
+    }
+
+    #[test]
+    fn a_malformed_txid_is_rejected() {
+        assert!(display_txid_to_internal("00").is_none());
+        assert!(display_txid_to_internal("zz").is_none());
+    }
+}

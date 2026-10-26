@@ -18,6 +18,16 @@ impl NNSClient {
         NNSClient { nostr_client }
     }
 
+    /// Creates a client without contacting any relay.
+    ///
+    /// Local testbed runs set `CUBE_ENGINE_ADDR` and connect directly, so relay discovery would
+    /// only add startup latency and external dependencies.
+    pub fn new_local(keys: &KeyHolder) -> Self {
+        NNSClient {
+            nostr_client: nostr_sdk::Client::new(keys.nostr_key_pair()),
+        }
+    }
+
     pub async fn query_address(&self, npub: &str) -> Option<String> {
         let public_key = PublicKey::from_bech32(npub).ok()?;
 

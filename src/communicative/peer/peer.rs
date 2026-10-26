@@ -3,9 +3,10 @@ use crate::{
         nns::client::NNSClient,
         tcp::{
             client::TCPClient,
-            tcp::{connect_nns, TCPError},
+            tcp::{connect_addr, connect_nns, TCPError},
         },
     },
+    inscriptive::baked,
     operative::run_args::chain::Chain,
 };
 use async_trait::async_trait;
@@ -45,6 +46,21 @@ pub struct Peer {
 #[allow(non_camel_case_types)]
 pub type PEER = Arc<Mutex<Peer>>;
 
+/// Opens a socket to an Engine.
+///
+/// A local testbed run sets `CUBE_ENGINE_ADDR` and connects directly; every other chain uses NNS
+/// discovery as before.
+async fn connect_engine(
+    chain: Chain,
+    key: [u8; 32],
+    nns_client: &NNSClient,
+) -> Result<tokio::net::TcpStream, TCPError> {
+    match (chain, baked::testbed_engine_addr()) {
+        (Chain::Testbed, Some(addr)) => connect_addr(&addr).await,
+        _ => connect_nns(key, nns_client, chain).await,
+    }
+}
+
 impl Peer {
     pub async fn connect(
         chain: Chain,
@@ -53,7 +69,7 @@ impl Peer {
         nns_client: &NNSClient,
     ) -> Result<PEER, TCPError> {
         let (socket_, addr) = {
-            match connect_nns(key, nns_client, chain).await {
+            match connect_engine(chain, key, nns_client).await {
                 Ok(socket) => {
                     let addr = match socket.peer_addr() {
                         Ok(addr) => addr,
@@ -185,7 +201,7 @@ impl PeerConnection for PEER {
                     (_peer.key(), _peer.nns_client())
                 };
 
-                match connect_nns(nns_key, &nns_client, chain).await {
+                match connect_engine(chain, nns_key, &nns_client).await {
                     Ok(socket) => {
                         let addr = match socket.peer_addr() {
                             Ok(addr) => addr,

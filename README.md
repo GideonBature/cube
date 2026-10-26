@@ -90,6 +90,10 @@ cargo run -p cube-cli -- scenario run liftv2-refund   # mines ~13,000 blocks
 fixtures and the CLI is regtest-only. The full sequential acceptance run, including the negative
 cases and the state/garbage-collection suites, is [docs/e2e_regtest.md](docs/e2e_regtest.md).
 
+`Chain::Testbed` is a local regtest profile for the Engine and Node: `bcrt` addresses, sync from
+height 0, and a direct peer address. It needs an operator-supplied Engine key and a funded genesis
+payload; stage 11c of the runbook lists the exact environment variables and setup.
+
 The VM-derived proof test is release-only and feature-gated so the default CLI does not link the
 proving stack:
 

@@ -182,7 +182,7 @@ fn genesis(args: &[String]) {
             let chain = match args[2].to_lowercase().as_str() {
                 "signet" => Chain::Signet,
                 "mainnet" => Chain::Mainnet,
-                "testbed" => Chain::Testbed,
+                "testbed" | "regtest" => Chain::Testbed,
                 _ => {
                     eprintln!("{}", "Invalid <chain>.".red());
                     return;
@@ -283,10 +283,7 @@ fn run(args: &[String]) {
     let chain = match args[2].to_lowercase().as_str() {
         "signet" => Chain::Signet,
         "mainnet" => Chain::Mainnet,
-        "testbed" => {
-            println!("{}", "Testbed is for local tests only (./tests/).".red());
-            return;
-        }
+        "testbed" | "regtest" => Chain::Testbed,
         _ => {
             println!("{}", "Invalid <chain>.".red());
             return;
@@ -405,7 +402,7 @@ fn run(args: &[String]) {
 fn print_correct_usage() {
     eprintln!(
         "{}",
-        "Usage:\n  gensec\n  genesis <mainnet|signet|testbed>\n  <mode> <chain> <kind> <bitcoin-rpc-url> <bitcoin-rpc-user> <bitcoin-rpc-password> <syncinflight?>\n\nIn engine/node CLI (archival mode): runexplorer <port>".to_string()
+        "Usage:\n  gensec\n  genesis <mainnet|signet|testbed|regtest>\n  <mode> <chain> <kind> <bitcoin-rpc-url> <bitcoin-rpc-user> <bitcoin-rpc-password> <syncinflight?>\n\nLocal regtest (chain 'regtest'/'testbed') reads CUBE_ENGINE_PUBLIC_KEY, CUBE_ENGINE_ADDR,\nCUBE_TESTBED_GENESIS_TXID, CUBE_TESTBED_GENESIS_VOUT and CUBE_TESTBED_GENESIS_AMOUNT.\n\nIn engine/node CLI (archival mode): runexplorer <port>".to_string()
         .red()
     );
 }

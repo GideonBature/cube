@@ -10,7 +10,8 @@ type ScriptPubKey = Vec<u8>;
 /// # Arguments
 fn hrp_from_chain(chain: Chain) -> Option<Hrp> {
     match chain {
-        Chain::Signet | Chain::Testbed => Hrp::parse("tb").ok(),
+        Chain::Testbed => Hrp::parse("bcrt").ok(),
+        Chain::Signet => Hrp::parse("tb").ok(),
         Chain::Mainnet => Hrp::parse("bc").ok(),
     }
 }
@@ -78,7 +79,12 @@ pub fn address_to_spk(chain: Chain, address: &str) -> Option<ScriptPubKey> {
 
     // Check if the network is valid
     match chain {
-        Chain::Signet | Chain::Testbed => {
+        Chain::Testbed => {
+            if hrp != Hrp::parse("bcrt").expect("invalid hrp") {
+                return None;
+            }
+        }
+        Chain::Signet => {
             if hrp != Hrp::parse("tb").expect("invalid hrp") {
                 return None;
             }

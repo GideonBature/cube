@@ -250,36 +250,47 @@ impl P2TR for Payload {
 
 /// Returns a genesis engine payload.
 pub fn genesis_payload(chain: Chain) -> Payload {
-    // 1 Get the engine key and payload bytes.
-    let engine_key: [u8; 32] = match chain {
-        Chain::Testbed => baked::SIGNET_ENGINE_PUBLIC_KEY,
-        Chain::Signet => baked::SIGNET_ENGINE_PUBLIC_KEY,
-        Chain::Mainnet => baked::MAINNET_ENGINE_PUBLIC_KEY,
+    // 1 Resolve the Engine key and the payload location.
+    //
+    // A local regtest chain has no baked history, so `Chain::Testbed` reads the engine key and the
+    // funded payload outpoint from the environment. The baked signet values remain the fallback;
+    // in-process tests never set the environment.
+    let (engine_key, genesis_payload_txid, genesis_payload_vout, genesis_payload_amount): (
+        [u8; 32],
+        [u8; 32],
+        u32,
+        u64,
+    ) = match chain {
+        Chain::Testbed => match baked::testbed_genesis_payload() {
+            Some((txid, vout, amount)) => (
+                baked::testbed_engine_public_key().unwrap_or(baked::SIGNET_ENGINE_PUBLIC_KEY),
+                txid,
+                vout,
+                amount,
+            ),
+            None => (
+                baked::SIGNET_ENGINE_PUBLIC_KEY,
+                baked::SIGNET_GENESIS_PAYLOAD_TX_ID,
+                baked::SIGNET_GENESIS_PAYLOAD_VOUT,
+                baked::SIGNET_GENESIS_PAYLOAD_AMOUNT,
+            ),
+        },
+        Chain::Signet => (
+            baked::SIGNET_ENGINE_PUBLIC_KEY,
+            baked::SIGNET_GENESIS_PAYLOAD_TX_ID,
+            baked::SIGNET_GENESIS_PAYLOAD_VOUT,
+            baked::SIGNET_GENESIS_PAYLOAD_AMOUNT,
+        ),
+        Chain::Mainnet => (
+            baked::MAINNET_ENGINE_PUBLIC_KEY,
+            baked::MAINNET_GENESIS_PAYLOAD_TX_ID,
+            baked::MAINNET_GENESIS_PAYLOAD_VOUT,
+            baked::MAINNET_GENESIS_PAYLOAD_AMOUNT,
+        ),
     };
 
     // 2 Get the payload bytes.
     let payload_bytes = baked::GENESIS_INSCRIPTION.to_vec();
-
-    // 3 Get the genesis payload txid and vout.
-    let genesis_payload_txid: [u8; 32] = match chain {
-        Chain::Testbed => baked::SIGNET_GENESIS_PAYLOAD_TX_ID,
-        Chain::Signet => baked::SIGNET_GENESIS_PAYLOAD_TX_ID,
-        Chain::Mainnet => baked::MAINNET_GENESIS_PAYLOAD_TX_ID,
-    };
-
-    // 4 Get the genesis payload vout.
-    let genesis_payload_vout: u32 = match chain {
-        Chain::Testbed => baked::SIGNET_GENESIS_PAYLOAD_VOUT,
-        Chain::Signet => baked::SIGNET_GENESIS_PAYLOAD_VOUT,
-        Chain::Mainnet => baked::MAINNET_GENESIS_PAYLOAD_VOUT,
-    };
-
-    // 5 Get the genesis payload amount.
-    let genesis_payload_amount: u64 = match chain {
-        Chain::Testbed => baked::SIGNET_GENESIS_PAYLOAD_AMOUNT,
-        Chain::Signet => baked::SIGNET_GENESIS_PAYLOAD_AMOUNT,
-        Chain::Mainnet => baked::MAINNET_GENESIS_PAYLOAD_AMOUNT,
-    };
 
     // 6 Construct the genesis payload without location.
     let genesis_payload_without_location = Payload::new(engine_key, payload_bytes, None);

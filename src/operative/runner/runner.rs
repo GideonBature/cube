@@ -14,9 +14,7 @@ use crate::inscriptive::archival_manager::archival_manager::ARCHIVAL_MANAGER;
 use crate::inscriptive::coin_manager::coin_manager::CoinManager;
 use crate::inscriptive::coin_manager::coin_manager::COIN_MANAGER;
 use crate::inscriptive::commit_journal::commit_journal::CommitJournal;
-use crate::inscriptive::commit_journal::reconcile::{
-    reconcile_pending_commit, Reconciliation,
-};
+use crate::inscriptive::commit_journal::reconcile::{reconcile_pending_commit, Reconciliation};
 use crate::inscriptive::flame_manager::flame_manager::FlameManager;
 use crate::inscriptive::flame_manager::flame_manager::FLAME_MANAGER;
 use crate::inscriptive::graveyard::graveyard::Graveyard;
@@ -74,6 +72,20 @@ pub async fn run(
         return;
     }
 
+    // 2.b A local regtest has no baked Engine identity or history; require the overrides.
+    if chain == Chain::Testbed
+        && (crate::inscriptive::baked::testbed_engine_public_key().is_none()
+            || crate::inscriptive::baked::testbed_genesis_payload().is_none()
+            || crate::inscriptive::baked::testbed_engine_addr().is_none())
+    {
+        eprintln!(
+            "{}",
+            "Local regtest requires CUBE_ENGINE_PUBLIC_KEY, CUBE_ENGINE_ADDR and CUBE_TESTBED_GENESIS_{TXID,VOUT,AMOUNT}; see docs/e2e_regtest.md."
+                .red()
+        );
+        return;
+    }
+
     // 3 Print the initializing message according to the operating kind.
     match operating_kind {
         OperatingKind::Engine => {
@@ -108,8 +120,7 @@ pub async fn run(
         Err(error) => {
             eprintln!(
                 "{} {:?}",
-                "Refusing to start: an interrupted batch commit could not be reconciled."
-                    .red(),
+                "Refusing to start: an interrupted batch commit could not be reconciled.".red(),
                 error
             );
             return;
@@ -230,8 +241,11 @@ pub async fn run(
         }
     };
 
-    // 10.e Initialize NNS client.
-    let nns_client = NNSClient::new(&key_holder).await;
+    // 10.e Initialize NNS client. Local testbed runs connect to a direct address.
+    let nns_client = match chain {
+        Chain::Testbed => NNSClient::new_local(&key_holder),
+        _ => NNSClient::new(&key_holder).await,
+    };
 
     // 10.d For node mode, pre-connect to engine so chain sync can pull batch containers.
     let pre_sync_engine_conn: Option<PEER> = match operating_kind {
@@ -305,16 +319,17 @@ pub async fn run(
                 return;
             }
 
-            // 11.a.2 Open port 6272 for incoming connections.
-            if open_port(chain).await {
+            // 11.a.2 Open port 6272 for incoming connections. A local testbed does not use UPnP.
+            if chain != Chain::Testbed && open_port(chain).await {
                 println!(
                     "{}",
                     format!("Opened port '{}'.", port_number(chain)).green()
                 )
             }
 
-            // 11.a.3 Run NNS server in the background.
-            {
+            // 11.a.3 Run NNS server in the background. A local testbed uses a direct address, so
+            //        there is nothing to publish.
+            if chain != Chain::Testbed {
                 let nns_client = nns_client.clone();
                 tokio::spawn(async move {
                     let _ = nns::server::run(&nns_client, operating_kind).await;

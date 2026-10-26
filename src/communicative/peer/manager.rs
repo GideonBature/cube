@@ -13,7 +13,11 @@ pub type PEER_MANAGER = Arc<Mutex<PeerManager>>;
 
 pub fn engine_key(chain: Chain) -> [u8; 32] {
     match chain {
-        Chain::Signet | Chain::Testbed => baked::SIGNET_ENGINE_PUBLIC_KEY,
+        // A local testbed Engine has no baked identity; the operator supplies one.
+        Chain::Testbed => {
+            baked::testbed_engine_public_key().unwrap_or(baked::SIGNET_ENGINE_PUBLIC_KEY)
+        }
+        Chain::Signet => baked::SIGNET_ENGINE_PUBLIC_KEY,
         Chain::Mainnet => baked::MAINNET_ENGINE_PUBLIC_KEY,
     }
 }

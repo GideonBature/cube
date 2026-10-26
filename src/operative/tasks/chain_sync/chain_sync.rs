@@ -95,7 +95,8 @@ impl ChainSync for SYNC_MANAGER {
         let sync_manager: &SYNC_MANAGER = self;
 
         let sync_start_height = match chain {
-            Chain::Signet | Chain::Testbed => baked::SIGNET_SYNC_START_HEIGHT,
+            Chain::Testbed => 0,
+            Chain::Signet => baked::SIGNET_SYNC_START_HEIGHT,
             Chain::Mainnet => baked::MAINNET_SYNC_START_HEIGHT,
         };
 

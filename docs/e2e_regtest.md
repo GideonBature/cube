@@ -56,7 +56,8 @@ The table is deliberately blunt.
 | **Per-step Bitcoin cost visibility** | `cost` in `assert`/`take`/`disprove`/`recover`/`refund` | implemented |
 | **VM-derived manifest -> real Groth16 proof -> Argo -> Bitcoin** | `tests/engine_proof.rs` (`--features proof`, release) | implemented, regtested |
 | **Engine-scanned LiftV2 outputs** | `V2_LIFT_ENABLED = true`, `tests/liftv2_scan.rs` | implemented, scan tested |
-| V2 liftup through the interactive node CLI | none | **not rehearsed** |
+| Interactive liftup through the node CLI (V1 lift) | local regtest profile (stage 11c) | implemented, regtested |
+| V2 liftup through the node CLI | local regtest profile (stage 11c) | **blocked**: `SignedBatchTxn` rejects `Lift::LiftV2`; needs a participant MuSig2 round-trip |
 | BIP-340 inside the proof relation | none | **not implemented** (`BIND-01`) |
 | Unilateral operator assertion without the beneficiary | none | **not implemented** (`BIND-01`) |
 | Data availability of the table and authenticated input | none | **commitments only** (`DA-01`) |
@@ -92,11 +93,16 @@ What is still open:
   fee: the VM's raw owner balance includes it, the state handed to the circuit does not. That is
   the documented boundary, not a zero-fee fixture. If the specification wants Engine fees inside
   the committed state, it is a schema and circuit change.
-- **V2 liftup through the node CLI.** The scan switch is on and the scan is tested, but the
-  interactive `liftup` path has not been rehearsed end to end against the node CLI. Every scenario
-  still funds the deposit externally.
+- **V2 liftup through the node CLI.** The scan switch is on, the scan is tested, and the node
+  admits the V2 liftup into the Engine's session pool. The batch builder then rejects it:
+  `SignedBatchTxnConstructError(LiftV2NotSupportedError(..))`. A V2 lift is a MuSig2 output of the
+  participant and the Engine, so the batch transaction needs the participant's signature over the
+  batch sighash. That round-trip does not exist in the `liftup_v1` protocol; closing it is a
+  protocol change, not a harness task. The V1 lift path is rehearsed end to end (stage 11c).
 
-These are representation and harness tasks on top of implemented components.
+The canonical-state adapter and the entry-fee boundary are representation tasks on top of
+implemented components. The V2 liftup needs a protocol round-trip for the participant's signature,
+which is the next design decision rather than a harness task.
 
 ### The genuine research and operational gaps
 
@@ -671,6 +677,65 @@ Argo's equation, garbles a table, evaluates the real proof (`Accepted`), binds t
 input digest, table digest and verifier identity into the assertion terms, publishes the successor,
 asserts, and takes the claim. It is release-only and feature-gated so the default CLI does not link
 the proving stack. Measured: about 13 s of test time in release.
+
+### Stage 11c — Local Engine and Node on regtest
+
+`Chain::Testbed` is the local regtest profile: `bcrt` addresses, sync from height 0, a direct peer
+address instead of Nostr, and an Engine identity and genesis payload supplied by the operator. The
+Engine and the Node must run in **separate working directories** because every manager is keyed by
+chain only (`storage/testbed/`).
+
+```sh
+# 1. Fresh chain and a funded genesis payload.
+./scripts/regtest.sh up
+GEN=$( ./target/debug/cube genesis testbed )
+ENGINE_NSEC=$(echo "$GEN" | jq -r '.genesis_params.engine.secret_key.nsec')
+ENGINE_PUB=$(echo "$GEN" | jq -r '.genesis_params.engine.public_key.hex')
+PAYLOAD_ADDR=$(echo "$GEN" | jq -r '.genesis_params.genesis_payload_address')
+
+# create/load the wallet, mine 101 blocks, then:
+TXID=$(bitcoin-cli -rpcwallet=cube sendtoaddress "$PAYLOAD_ADDR" 0.0002)
+VOUT=$(bitcoin-cli -rpcwallet=cube gettransaction "$TXID" \
+  | jq -r --arg a "$PAYLOAD_ADDR" '.details[] | select(.address == $a) | .vout')
+bitcoin-cli -rpcwallet=cube generatetoaddress 2 <wallet-address>
+
+export CUBE_ENGINE_PUBLIC_KEY=$ENGINE_PUB
+export CUBE_ENGINE_ADDR=127.0.0.1:6272
+export CUBE_TESTBED_GENESIS_TXID=$TXID
+export CUBE_TESTBED_GENESIS_VOUT=$VOUT
+export CUBE_TESTBED_GENESIS_AMOUNT=20000
+
+# 2. Engine (its own directory), then Node (another directory).
+mkdir -p target/local/engine target/local/node
+(cd target/local/engine && ../../debug/cube archival regtest engine \
+  http://127.0.0.1:18443 cube cube true)
+(cd target/local/node && ../../debug/cube archival regtest node \
+  http://127.0.0.1:18443 cube cube true)
+```
+
+In the Node CLI: `liftaddr`, fund the printed `liftv1` address, mine two blocks, wait for both
+sides to log `Synced height`, then `lifts` and `liftup`. In the Engine CLI: `tip`, `print
+coinmanager`, `print registry`.
+
+Observed with a V1 lift of 200,000 sats (fresh chain, payload 20,000 sats):
+
+| Step | Result |
+|---|---|
+| Node `liftup` | entry admitted with `version: v1`; Engine session height 1 |
+| Engine batch | `New batch record`, batch 1, new payload 219,462 sats |
+| Node in-flight sync | `In-flight sync applied batch #1`, batch tip 1, account balance 199,940 |
+| Registry | account registered with the node's BLS key |
+
+With a V2 lift the same flow reaches admission and then fails in the batch builder:
+
+```
+Failed to get the batch container: SignedBatchTxnConstructError(
+  LiftV2NotSupportedError(LiftV2 { ... }))
+```
+
+The new payload is not built, no transaction is broadcast, and both sides keep their previous state.
+`liftup` submits every self-owned lift, so a chain that still holds an earlier V2 deposit must be
+reset before a V1-only run.
 
 ---
 
